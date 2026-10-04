@@ -67,6 +67,11 @@ library WavvyMath {
         return Math.mulDiv(amount, bps, BPS_DENOMINATOR);
     }
 
+    /// @notice Convert basis points to a wad factor.
+    function bpsToWad(uint256 bps) internal pure returns (uint256) {
+        return Math.mulDiv(bps, WAD, BPS_DENOMINATOR);
+    }
+
     function absDiff(uint256 a, uint256 b) internal pure returns (uint256) {
         return a >= b ? a - b : b - a;
     }
@@ -143,6 +148,11 @@ library WavvyMath {
     /// @notice Divide a signed wad value by a plain integer count.
     function divSignedByCount(int256 a, uint256 count) internal pure returns (int256) {
         return sdUnwrap(sdDiv(sd(a), sd(int256(count) * int256(WAD))));
+    }
+
+    /// @notice Multiply a signed wad value by a plain integer count.
+    function mulSignedByCount(int256 a, uint256 count) internal pure returns (int256) {
+        return sdUnwrap(sdMul(sd(a), sd(int256(count) * int256(WAD))));
     }
 
     function isZeroSigned(int256 a) internal pure returns (bool) {

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.34;
 
 import { Test } from "forge-std/Test.sol";
@@ -156,7 +156,7 @@ contract WavvyIndexOracleTest is Test {
         assertEq(value, INDEX_FLOOR);
     }
 
-    function test_UnknownMarketReturnsInvalid() public {
+    function test_UnknownMarketReturnsInvalid() public view {
         (uint256 value, bool valid) = indexOracle.indexValue(99);
         assertFalse(valid);
         assertEq(value, 0);

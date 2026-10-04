@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.34;
 
-/// @notice Index market surface. The index value is computed from constituent
-/// metric TWAPs and is 18-decimal fixed point.
+/// @notice Index market surface. The index value is computed from constituent metric TWAPs and is 18-decimal fixed point.
 interface IWavvyIndexOracle {
     /// @notice Current index value. `valid` is false when no constituent is
     /// usable, in which case the value is zero and must not be traded against.

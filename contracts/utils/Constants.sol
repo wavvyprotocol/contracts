@@ -21,3 +21,7 @@ uint256 constant SECONDS_PER_YEAR = 31_536_000;
 // Ring buffer capacity per oracle metric. At an hourly interval this is
 // roughly 21 days of history, enough for the 7 day music TWAP window.
 uint16 constant MAX_OBSERVATIONS = 512;
+
+// A partial liquidation reduces the position until equity covers maintenance
+// margin times this buffer. 1.05 leaves a 5 percent cushion against slippage.
+uint256 constant LIQUIDATION_TARGET_BUFFER = 1.05e18;

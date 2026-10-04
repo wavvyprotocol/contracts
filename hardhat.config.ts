@@ -11,6 +11,7 @@ export default defineConfig({
         enabled: true,
         runs: 200,
       },
+      viaIR: true,
       metadata: {
         bytecodeHash: "ipfs",
       },
@@ -49,7 +50,6 @@ export default defineConfig({
     sourcify: {
       enabled: true,
       apiUrl: "https://sourcify-api-monad.blockvision.org",
-      browserUrl: "https://testnet.monadvision.com/"
     },
   },
   chainDescriptors: {
