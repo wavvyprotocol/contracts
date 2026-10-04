@@ -1,0 +1,276 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.34;
+
+import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
+import { IReceiver } from "../interfaces/IReceiver.sol";
+import { IWavvyOracle } from "../interfaces/IWavvyOracle.sol";
+import { TWAPLib } from "../lib/TWAPLib.sol";
+import { WavvyMath } from "../lib/WavvyMath.sol";
+import { BPS_DENOMINATOR, MAX_OBSERVATIONS } from "../utils/Constants.sol";
+
+/// @notice Metric oracle. Receives reports from the CRE receiver entrypoint
+/// and from the fallback keeper, keeps per-metric TWAP observations, and
+/// exposes freshness so trading contracts can pause on stale data.
+///
+/// Report payload delivered to `onReport`:
+/// abi.encode(bytes32 metricId, uint256 value, uint64 observedAt, uint8 status).
+/// Status codes: 0 OK, 1 SUSPENDED, 2 NOT_FOUND, 3 STALE, 4 INVALID.
+/// A missing metric is never posted as zero: zero values revert and SUSPENDED
+/// or NOT_FOUND reports freeze the metric without changing its value.
+contract WavvyOracle is AccessControl, IWavvyOracle, IReceiver {
+    bytes32 public constant CRE_REPORTER_ROLE = keccak256("CRE_REPORTER_ROLE");
+    bytes32 public constant FALLBACK_KEEPER_ROLE = keccak256("FALLBACK_KEEPER_ROLE");
+
+    uint8 public constant STATUS_OK = 0;
+    uint8 public constant STATUS_SUSPENDED = 1;
+    uint8 public constant STATUS_NOT_FOUND = 2;
+    uint8 public constant STATUS_STALE = 3;
+    uint8 public constant STATUS_INVALID = 4;
+
+    struct Metric {
+        TWAPLib.State observations;
+        uint64 lastUpdateAt;
+        uint64 heartbeat;
+        uint64 twapWindow;
+        uint64 minTwapWindow;
+        uint16 maxDeviationBps;
+        uint16 circuitBreakerBps;
+        uint256 lastValue;
+        bool registered;
+        bool suspended;
+        bool frozen;
+    }
+
+    mapping(bytes32 => Metric) private _metrics;
+
+    error UnauthorizedReporter();
+    error UnknownMetric();
+    error ZeroMetric();
+    error StaleOracle();
+    error FutureTimestamp();
+    error DeviationTooHigh();
+    error CircuitBreakerActive();
+    error CreHealthy();
+    error InvalidReport();
+    error InvalidConfig();
+    error DuplicateMetric();
+
+    event MetricRegistered(
+        bytes32 indexed metricId,
+        uint64 heartbeat,
+        uint64 twapWindow,
+        uint64 minTwapWindow,
+        uint16 maxDeviationBps,
+        uint16 circuitBreakerBps
+    );
+    event MetricConfigUpdated(
+        bytes32 indexed metricId,
+        uint64 heartbeat,
+        uint64 twapWindow,
+        uint64 minTwapWindow,
+        uint16 maxDeviationBps,
+        uint16 circuitBreakerBps
+    );
+    event MetricUpdated(
+        bytes32 indexed metricId, uint256 value, uint64 observedAt, uint8 status, address indexed reporter
+    );
+    event MetricSuspended(bytes32 indexed metricId, uint8 status);
+    event MetricResumed(bytes32 indexed metricId);
+    event CircuitBroken(bytes32 indexed metricId, uint256 value, uint256 lastValue);
+    event CircuitReset(bytes32 indexed metricId);
+
+    constructor(address admin) {
+        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+    }
+
+    /// @notice Register a metric with its freshness and guard configuration.
+    /// TWAP windows come from risk review; nothing here is chain-specific.
+    function registerMetric(
+        bytes32 metricId,
+        uint64 heartbeat,
+        uint64 twapWindow,
+        uint64 minTwapWindow,
+        uint16 maxDeviationBps,
+        uint16 circuitBreakerBps
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        Metric storage m = _metrics[metricId];
+        if (m.registered) revert DuplicateMetric();
+        _validateConfig(heartbeat, twapWindow, minTwapWindow, maxDeviationBps, circuitBreakerBps);
+        m.registered = true;
+        m.heartbeat = heartbeat;
+        m.twapWindow = twapWindow;
+        m.minTwapWindow = minTwapWindow;
+        m.maxDeviationBps = maxDeviationBps;
+        m.circuitBreakerBps = circuitBreakerBps;
+        emit MetricRegistered(metricId, heartbeat, twapWindow, minTwapWindow, maxDeviationBps, circuitBreakerBps);
+    }
+
+    function setMetricConfig(
+        bytes32 metricId,
+        uint64 heartbeat,
+        uint64 twapWindow,
+        uint64 minTwapWindow,
+        uint16 maxDeviationBps,
+        uint16 circuitBreakerBps
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        Metric storage m = _metrics[metricId];
+        if (!m.registered) revert UnknownMetric();
+        _validateConfig(heartbeat, twapWindow, minTwapWindow, maxDeviationBps, circuitBreakerBps);
+        m.heartbeat = heartbeat;
+        m.twapWindow = twapWindow;
+        m.minTwapWindow = minTwapWindow;
+        m.maxDeviationBps = maxDeviationBps;
+        m.circuitBreakerBps = circuitBreakerBps;
+        emit MetricConfigUpdated(metricId, heartbeat, twapWindow, minTwapWindow, maxDeviationBps, circuitBreakerBps);
+    }
+
+    /// @notice Freeze or unfreeze a metric after the platform status changes.
+    function setSuspended(bytes32 metricId, bool suspended) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        Metric storage m = _metrics[metricId];
+        if (!m.registered) revert UnknownMetric();
+        if (m.suspended == suspended) return;
+        m.suspended = suspended;
+        if (suspended) {
+            emit MetricSuspended(metricId, STATUS_SUSPENDED);
+        } else {
+            emit MetricResumed(metricId);
+        }
+    }
+
+    /// @notice Clear the circuit breaker after inspection so updates flow again.
+    function resetCircuitBreaker(bytes32 metricId) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        Metric storage m = _metrics[metricId];
+        if (!m.registered) revert UnknownMetric();
+        m.frozen = false;
+        emit CircuitReset(metricId);
+    }
+
+    /// @notice CRE receiver entrypoint. Only the CRE reporter role, held by
+    /// the forwarder, may deliver reports.
+    function onReport(bytes calldata, bytes calldata report) external override {
+        if (!hasRole(CRE_REPORTER_ROLE, msg.sender)) revert UnauthorizedReporter();
+        (bytes32 metricId, uint256 value, uint64 observedAt, uint8 status) =
+            abi.decode(report, (bytes32, uint256, uint64, uint8));
+        _post(metricId, value, observedAt, status, false);
+    }
+
+    /// @notice Fallback keeper entrypoint. Allowed only while the metric is
+    /// not fresh, so the fallback never writes over healthy CRE data.
+    function postFallback(bytes32 metricId, uint256 value, uint64 observedAt) external {
+        if (!hasRole(FALLBACK_KEEPER_ROLE, msg.sender)) revert UnauthorizedReporter();
+        _post(metricId, value, observedAt, STATUS_OK, true);
+    }
+
+    function getTWAP(bytes32 metricId) external view override returns (uint256) {
+        Metric storage m = _metrics[metricId];
+        if (!m.registered) revert UnknownMetric();
+        return TWAPLib.getTWAP(m.observations, m.twapWindow, m.minTwapWindow, uint64(block.timestamp));
+    }
+
+    function getTWAP(bytes32 metricId, uint64 window) external view override returns (uint256) {
+        Metric storage m = _metrics[metricId];
+        if (!m.registered) revert UnknownMetric();
+        return TWAPLib.getTWAP(m.observations, window, m.minTwapWindow, uint64(block.timestamp));
+    }
+
+    function latestValue(bytes32 metricId) external view override returns (uint256) {
+        return _metrics[metricId].lastValue;
+    }
+
+    function lastUpdateAt(bytes32 metricId) external view override returns (uint64) {
+        return _metrics[metricId].lastUpdateAt;
+    }
+
+    function isFresh(bytes32 metricId) external view override returns (bool) {
+        return _isFresh(_metrics[metricId]);
+    }
+
+    function isSuspended(bytes32 metricId) external view override returns (bool) {
+        return _metrics[metricId].suspended;
+    }
+
+    function isFrozen(bytes32 metricId) external view override returns (bool) {
+        return _metrics[metricId].frozen;
+    }
+
+    function metricConfig(bytes32 metricId)
+        external
+        view
+        returns (uint64 heartbeat, uint64 twapWindow, uint64 minTwapWindow, uint16 maxDeviationBps, uint16 circuitBreakerBps, bool registered)
+    {
+        Metric storage m = _metrics[metricId];
+        return (m.heartbeat, m.twapWindow, m.minTwapWindow, m.maxDeviationBps, m.circuitBreakerBps, m.registered);
+    }
+
+    function _post(bytes32 metricId, uint256 value, uint64 observedAt, uint8 status, bool fromFallback) internal {
+        Metric storage m = _metrics[metricId];
+        if (!m.registered) revert UnknownMetric();
+        if (status == STATUS_INVALID) revert InvalidReport();
+        if (observedAt > block.timestamp) revert FutureTimestamp();
+
+        if (status == STATUS_STALE) {
+            // A stale reading never updates the value or the heartbeat.
+            emit MetricUpdated(metricId, m.lastValue, observedAt, status, msg.sender);
+            return;
+        }
+
+        if (status == STATUS_SUSPENDED || status == STATUS_NOT_FOUND) {
+            if (!m.suspended) {
+                m.suspended = true;
+                emit MetricSuspended(metricId, status);
+            }
+            emit MetricUpdated(metricId, m.lastValue, observedAt, status, msg.sender);
+            return;
+        }
+
+        if (status != STATUS_OK) revert InvalidReport();
+        if (value == 0) revert ZeroMetric();
+        if (fromFallback && _isFresh(m)) revert CreHealthy();
+        if (observedAt <= m.lastUpdateAt) revert StaleOracle();
+        if (m.frozen) revert CircuitBreakerActive();
+
+        if (m.lastValue > 0) {
+            uint256 devBps = WavvyMath.deviationBps(value, m.lastValue);
+            if (devBps > m.circuitBreakerBps) {
+                // Extreme movement: reject the value, keep the previous data,
+                // and freeze the metric until an operator inspects the source.
+                m.frozen = true;
+                emit CircuitBroken(metricId, value, m.lastValue);
+                return;
+            }
+            if (devBps > m.maxDeviationBps) revert DeviationTooHigh();
+        }
+
+        TWAPLib.write(m.observations, value, observedAt, MAX_OBSERVATIONS);
+        m.lastValue = value;
+        m.lastUpdateAt = observedAt;
+        if (m.suspended) {
+            // Fresh valid data clears a reporter-driven suspension. Index
+            // rebalances handle the fresh baseline separately.
+            m.suspended = false;
+            emit MetricResumed(metricId);
+        }
+        emit MetricUpdated(metricId, value, observedAt, status, msg.sender);
+    }
+
+    function _isFresh(Metric storage m) internal view returns (bool) {
+        if (!m.registered || m.frozen || m.suspended) return false;
+        if (m.lastUpdateAt == 0) return false;
+        return block.timestamp - m.lastUpdateAt <= m.heartbeat;
+    }
+
+    function _validateConfig(
+        uint64 heartbeat,
+        uint64 twapWindow,
+        uint64 minTwapWindow,
+        uint16 maxDeviationBps,
+        uint16 circuitBreakerBps
+    ) internal pure {
+        if (heartbeat == 0 || twapWindow == 0 || minTwapWindow == 0 || minTwapWindow > twapWindow) {
+            revert InvalidConfig();
+        }
+        if (maxDeviationBps > circuitBreakerBps || circuitBreakerBps > BPS_DENOMINATOR) {
+            revert InvalidConfig();
+        }
+    }
+}
