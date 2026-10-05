@@ -1,12 +1,12 @@
 {
   "network": "hardhatFork",
   "chainId": 143,
-  "treasury": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
-  "grantsPool": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+  "treasury": "0x00000ac095ab728feebef880a3d4801f71732808",
+  "grantsPool": "0x00000ac095ab728feebef880a3d4801f71732808",
   "timelock": "0x499aa73a1d27e54b33e7db05ffd22854ec70257e",
-  "timelockDelay": 3600,
-  "timelockProposer": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
-  "adminRenounced": true,
+  "timelockDelay": 1800,
+  "timelockProposer": "0x00000ac095ab728feebef880a3d4801f71732808",
+  "adminRenounced": false,
   "riskSeeded": false,
   "contracts": {
     "MockUSDC": "0x3c2bafebbb0c8c58f39a976e725cd20d611d01e9",
@@ -23,5 +23,5 @@
     "WavvyCurator": "0x4f1f87d512650f32bf9949c4c5ef37a3cc891c6d",
     "WavvyTimelock": "0x499aa73a1d27e54b33e7db05ffd22854ec70257e"
   },
-  "updatedAt": "2026-10-05T07:28:03.539Z"
+  "updatedAt": "2026-10-05T11:15:00.862Z"
 }

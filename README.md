@@ -24,10 +24,35 @@ npx hardhat compile
 npx hardhat test
 ```
 
+## Architecture
+
+- `WavvyOracle` keeps per-metric observation rings and their guards (staleness,
+  deviation, circuit breaker). Only the CRE forwarder and the fallback keeper
+  can report, and a missing metric is never posted as zero. `WavvyIndexOracle`
+  computes index values onchain from constituent TWAPs at zero oracle cost.
+- `WavvyVault` is the single custody point. Every protocol account (users, the
+  position ledger, treasury, insurance, creator escrow, curator stake) holds a
+  wad balance inside it; token movement happens only on deposit and withdraw.
+- `WavvyAMM` is a per-market constant product on virtual reserves. The mark
+  price is quote over base and funding accrues per block into a cumulative
+  index that positions checkpoint against.
+- `WavvyHouse` opens, closes, and liquidates positions and settles PnL between
+  vault accounts against the treasury, with the insurance fund as backstop.
+  Ownership always resolves through the position NFT holder.
+- `WavvyPosition` is the ERC721 ledger: margin, size, entry price, and the
+  funding checkpoint live on the token id, so transfers move the position.
+- `WavvyFactory` registers curated markets and wires each market's price
+  source. `WavvyCreatorRewards` escrows creator fee shares per creator id,
+  `WavvyCurator` records staked calls and copy fees, `WavvyInsurance` backstops
+  bad debt.
+- `WavvyRiskManager` is the single source of limits; the house and the AMM read
+  it on every state-changing call. Every admin action routes through
+  `WavvyTimelock`, and the deployer holds no admin role after handover.
+
 ## Deploy
 
 The deploy script deploys every contract in dependency order, wires the roles, hands every admin role to the timelock, renounces the deployer, verifies on
-live networks, and records addresses in `deployments/<network>.json`. Running it again reuses existing deployments.
+live networks, and records addresses in `deployments/<network>.json`.
 
 ```bash
 # dry run against a Monad mainnet fork

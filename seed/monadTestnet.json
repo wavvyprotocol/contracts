@@ -1,0 +1,650 @@
+{
+  "metrics": [
+    {
+      "metricId": "0x1492be02270daebdb317d7cdeb55a81266fb4a1ddcdcc19f3dd49d64bae6db9c",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0xacdd1fb6b21f4295e158ef6f1d305b55c366aac3c663b14e1dee15a68b005c28",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0x6e45dec6942cf7ba578715519bd3e897a2b43d487199d6034ae53557b27efb1c",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0xe914e59631b6a23235063321806320f0c747ea0c4d812bc8453aba6ff18e8402",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0x1214263f6ef8822d7ba7a067e662f96c821c89c4a174a004eed229cf8bcd8889",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0xb3db25596b1e25fbd04af96c3f661b7b328a76b7d266789a32187e14fc0572bd",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0xe736a3ca70bbf626a27cabb9bcfff3bdaf4a79c5f86ffe6903092e10e31dc005",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0xd5f3a3a7ca7a2f65d632a5794d8b3dcfa65a855c6c03d3f1f1af9e99cacddac2",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0xa903495992befea9d40d473374403adaad52bd49859e9701bc5c6c78e68eb66d",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0x69cc374163ae1cea1cd0f5f3d5c27ce905ae7cac6bb3e1915ad9b24bbda12780",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0xde7fb6d7a80a1397d0550e3f751bcc23af569ed871756c028599d7a599c69d5e",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0x184e1c5ecd77cf13fe99fbbc7891c1fefd5018cd974667ee9fd6738b4cebd732",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0x4b4363d551620f8f12d88122a6d2996e0743a89884f0d70b7e65394e919b6c51",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0xc07c23400cf2e17c335b30e8a3f3392599882a64be4f857f272690f517a963ae",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0x109d1508b06d848381b337ecaa0ba2798fe2dc1ebf9626ca8235395f75dfe64f",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0xae7ce7acfbdccbe7b0dbc356e984d6a2f4b5102837e72dbe173c9f5c053da0a2",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0x8f19af11f1dd167746da1dd6ca15c03d9c10be6ca25fe846cb0128db679b6382",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0xcbe76e09b40e5ea84c370caa7cfd882aec072332c38157d3e94771bd63b7d2b6",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0x3d64922dc379e77178f0867ec02180aba0b441c9929ae160d106a96b6d098460",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0x3222dde409d525903bd4eb950a4154c0d2155b344f51b01a91c3fef23d6ce8b7",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0x82ad554f06ffffa6a5ab8a04eba6fe72d3c0d5bd93c9b69081dfee8d0cdd6a95",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0xf738e00f0f8ad647622535b4988e501e4759be9b9c66104036f71e49fb67db07",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0x2c4d3426a0028ef3887e92c46afffd227fdccca95dc0400e51e50fae192347af",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0xb72bb9853f8be371079a4e3252fc4802520a1a0abc3e2531cdfd06ec5f0de722",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0x37a608396dd2dcb655ab52ac563f09873b64fbca1fecb4fd805f7d3ef2b6e1dd",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0xe413a9b8a0a338bea81fdbc24ec4d7f07f9d9d5db96178e52ddb7e7aed2942b3",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0x572c6e23f9507bda99306ba3756e3cad89bd60f900c9f7b49f18ddb5ffc29178",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0xa9113db690b1d4fd4e23b9f06a81a1741f73634432ee96d76e1f8a37718c5bbb",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    },
+    {
+      "metricId": "0x326b33b4fb27ba83843c38218a606f077e60b4c83f1ee94383dc923f414aa6d7",
+      "heartbeat": 7200,
+      "twapWindow": 86400,
+      "minTwapWindow": 3600,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    }
+  ],
+  "configureMarkets": [
+    {
+      "marketId": 1,
+      "marketType": 0
+    },
+    {
+      "marketId": 2,
+      "marketType": 0
+    },
+    {
+      "marketId": 3,
+      "marketType": 0
+    },
+    {
+      "marketId": 4,
+      "marketType": 0
+    },
+    {
+      "marketId": 5,
+      "marketType": 0
+    },
+    {
+      "marketId": 6,
+      "marketType": 0
+    },
+    {
+      "marketId": 7,
+      "marketType": 0
+    },
+    {
+      "marketId": 8,
+      "marketType": 0
+    },
+    {
+      "marketId": 9,
+      "marketType": 0
+    },
+    {
+      "marketId": 10,
+      "marketType": 0
+    },
+    {
+      "marketId": 11,
+      "marketType": 0
+    },
+    {
+      "marketId": 12,
+      "marketType": 0
+    },
+    {
+      "marketId": 13,
+      "marketType": 0
+    },
+    {
+      "marketId": 14,
+      "marketType": 0
+    },
+    {
+      "marketId": 15,
+      "marketType": 0
+    },
+    {
+      "marketId": 16,
+      "marketType": 0
+    },
+    {
+      "marketId": 17,
+      "marketType": 0
+    },
+    {
+      "marketId": 18,
+      "marketType": 0
+    },
+    {
+      "marketId": 19,
+      "marketType": 0
+    },
+    {
+      "marketId": 20,
+      "marketType": 0
+    },
+    {
+      "marketId": 21,
+      "marketType": 0
+    },
+    {
+      "marketId": 22,
+      "marketType": 0
+    },
+    {
+      "marketId": 23,
+      "marketType": 0
+    },
+    {
+      "marketId": 24,
+      "marketType": 0
+    },
+    {
+      "marketId": 25,
+      "marketType": 0
+    },
+    {
+      "marketId": 100,
+      "marketType": 1
+    },
+    {
+      "marketId": 101,
+      "marketType": 1
+    }
+  ],
+  "markets": [
+    {
+      "marketId": 1,
+      "marketType": 0,
+      "metricId": "0x1492be02270daebdb317d7cdeb55a81266fb4a1ddcdcc19f3dd49d64bae6db9c",
+      "creatorIds": [
+        "0x2788278b07d836a5f1abc193b01bef5a70f975d073c4881ddadaa503c8cd7e21"
+      ],
+      "initialPrice": "78400000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 2,
+      "marketType": 0,
+      "metricId": "0xacdd1fb6b21f4295e158ef6f1d305b55c366aac3c663b14e1dee15a68b005c28",
+      "creatorIds": [
+        "0x82af9a2d47c81964550af126b873b15f1dde9e8b6d92d73d7441d2b1d575c9e4"
+      ],
+      "initialPrice": "113400000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 3,
+      "marketType": 0,
+      "metricId": "0x6e45dec6942cf7ba578715519bd3e897a2b43d487199d6034ae53557b27efb1c",
+      "creatorIds": [
+        "0x043d1145417786b90b7d65ac70774f4db4de1c021dc73d0e62ed606d7a9dfe02"
+      ],
+      "initialPrice": "93700000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 4,
+      "marketType": 0,
+      "metricId": "0xe914e59631b6a23235063321806320f0c747ea0c4d812bc8453aba6ff18e8402",
+      "creatorIds": [
+        "0x54fc34f8d70d14abc3a882e3788c650cd361705138dcf08c413b52b4996b5809"
+      ],
+      "initialPrice": "115300000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 5,
+      "marketType": 0,
+      "metricId": "0x1214263f6ef8822d7ba7a067e662f96c821c89c4a174a004eed229cf8bcd8889",
+      "creatorIds": [
+        "0xf658044ec79b53919e4aff4c2f80fe636f1ee9ee78e32f86ec909033df4c6569"
+      ],
+      "initialPrice": "130800000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 6,
+      "marketType": 0,
+      "metricId": "0xb3db25596b1e25fbd04af96c3f661b7b328a76b7d266789a32187e14fc0572bd",
+      "creatorIds": [
+        "0x91273365037b64493985df5e129eac7a7c62c49fb53ecb505027cfd509ddc25b"
+      ],
+      "initialPrice": "519000000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 7,
+      "marketType": 0,
+      "metricId": "0xe736a3ca70bbf626a27cabb9bcfff3bdaf4a79c5f86ffe6903092e10e31dc005",
+      "creatorIds": [
+        "0x3f214eea32217340b7857df170a90b0f8d7b8fbab71b9e1ee755914270bed6a2"
+      ],
+      "initialPrice": "109000000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 8,
+      "marketType": 0,
+      "metricId": "0xd5f3a3a7ca7a2f65d632a5794d8b3dcfa65a855c6c03d3f1f1af9e99cacddac2",
+      "creatorIds": [
+        "0x2e7794708d2bee9df3d3e97148509ea404f0de8f00e0737261c541a58219aaaf"
+      ],
+      "initialPrice": "102000000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 9,
+      "marketType": 0,
+      "metricId": "0xa903495992befea9d40d473374403adaad52bd49859e9701bc5c6c78e68eb66d",
+      "creatorIds": [
+        "0x2d0dd4b63ed15b8ae7d2a6e2f4872c6c28b0addc4391d4e3ae3bac791c8f28d4"
+      ],
+      "initialPrice": "61600000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 10,
+      "marketType": 0,
+      "metricId": "0x69cc374163ae1cea1cd0f5f3d5c27ce905ae7cac6bb3e1915ad9b24bbda12780",
+      "creatorIds": [
+        "0xc009e9d7ffad5198b62f204f69436ed692468945020d7f03ef1f8fa899b3d0d4"
+      ],
+      "initialPrice": "80500000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 11,
+      "marketType": 0,
+      "metricId": "0xde7fb6d7a80a1397d0550e3f751bcc23af569ed871756c028599d7a599c69d5e",
+      "creatorIds": [
+        "0x7a1129fc8dae05f242394c5880df07ed815a981a4256e8169fdddca28d1fa9b5"
+      ],
+      "initialPrice": "163000000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 12,
+      "marketType": 0,
+      "metricId": "0x184e1c5ecd77cf13fe99fbbc7891c1fefd5018cd974667ee9fd6738b4cebd732",
+      "creatorIds": [
+        "0x7932049c4c00c5cd9a4b6b94794bf874769979c83dd59ad5dfdc6f2d78a61ccd"
+      ],
+      "initialPrice": "160300000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 13,
+      "marketType": 0,
+      "metricId": "0x4b4363d551620f8f12d88122a6d2996e0743a89884f0d70b7e65394e919b6c51",
+      "creatorIds": [
+        "0x220aa40682cdb0252ce9e90e27825c04204ca6d41d0370ff4f0606535ce6d672"
+      ],
+      "initialPrice": "91600000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 14,
+      "marketType": 0,
+      "metricId": "0xc07c23400cf2e17c335b30e8a3f3392599882a64be4f857f272690f517a963ae",
+      "creatorIds": [
+        "0xdb19ce0eb070415fc9d891b873de314e9d8619e3bb4db5abb51d788e66344a75"
+      ],
+      "initialPrice": "87000000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 15,
+      "marketType": 0,
+      "metricId": "0x109d1508b06d848381b337ecaa0ba2798fe2dc1ebf9626ca8235395f75dfe64f",
+      "creatorIds": [
+        "0xd8c77ca784b15fa49d2df1a351c0c0ddb710d89c4930d2ec14517eb9b6c9d066"
+      ],
+      "initialPrice": "87500000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 16,
+      "marketType": 0,
+      "metricId": "0xae7ce7acfbdccbe7b0dbc356e984d6a2f4b5102837e72dbe173c9f5c053da0a2",
+      "creatorIds": [
+        "0x52e40409aaae838b6245b2cce0af0b169a8268b62f714932d411144fee38a147"
+      ],
+      "initialPrice": "679700000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 17,
+      "marketType": 0,
+      "metricId": "0x8f19af11f1dd167746da1dd6ca15c03d9c10be6ca25fe846cb0128db679b6382",
+      "creatorIds": [
+        "0x5bb72f8a51329366e0d824bcc8f51ebe63f140852bdb659b23597d2e629896f2"
+      ],
+      "initialPrice": "380000000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 18,
+      "marketType": 0,
+      "metricId": "0xcbe76e09b40e5ea84c370caa7cfd882aec072332c38157d3e94771bd63b7d2b6",
+      "creatorIds": [
+        "0xa09ad79de495dae00f1d1b7e436aa41c69f0f9203568a8157e5d3a82c8841440"
+      ],
+      "initialPrice": "380000000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 19,
+      "marketType": 0,
+      "metricId": "0x3d64922dc379e77178f0867ec02180aba0b441c9929ae160d106a96b6d098460",
+      "creatorIds": [
+        "0x9c046eddd71d2f2bcba7e7cf70d23d301f7f8a7e50a790b6953af201793cddb4"
+      ],
+      "initialPrice": "241000000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 20,
+      "marketType": 0,
+      "metricId": "0x3222dde409d525903bd4eb950a4154c0d2155b344f51b01a91c3fef23d6ce8b7",
+      "creatorIds": [
+        "0xf9e70839f9be528b3e212bbee794360148cd1bd876b567d99a566a9217993a9d"
+      ],
+      "initialPrice": "343000000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 21,
+      "marketType": 0,
+      "metricId": "0x82ad554f06ffffa6a5ab8a04eba6fe72d3c0d5bd93c9b69081dfee8d0cdd6a95",
+      "creatorIds": [
+        "0x081236e855575b3cbd5306ad152ad2449d9492bb2acc62d0e2f33204ff1cff45"
+      ],
+      "initialPrice": "7900000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 22,
+      "marketType": 0,
+      "metricId": "0xf738e00f0f8ad647622535b4988e501e4759be9b9c66104036f71e49fb67db07",
+      "creatorIds": [
+        "0x527c4a21da33066951f00366789f268d59c7d00d00e05b710f56fe3b1a148898"
+      ],
+      "initialPrice": "1300000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 23,
+      "marketType": 0,
+      "metricId": "0x2c4d3426a0028ef3887e92c46afffd227fdccca95dc0400e51e50fae192347af",
+      "creatorIds": [
+        "0xcdf7d3f8f416c293c3c6a902d236783fece4c97e12b417caef0b334b6caf2bcd"
+      ],
+      "initialPrice": "241000000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 24,
+      "marketType": 0,
+      "metricId": "0xb72bb9853f8be371079a4e3252fc4802520a1a0abc3e2531cdfd06ec5f0de722",
+      "creatorIds": [
+        "0x7dd3eb72f94c610c1df07261ef9391eef3e7a1f176c9afcf9023466af38cb05d"
+      ],
+      "initialPrice": "12400000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 25,
+      "marketType": 0,
+      "metricId": "0x37a608396dd2dcb655ab52ac563f09873b64fbca1fecb4fd805f7d3ef2b6e1dd",
+      "creatorIds": [
+        "0xcef034d1aca44dac2ec9c5820ef84cdfd1b446578ea33065dc426ea62e86feb2"
+      ],
+      "initialPrice": "1100000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 100,
+      "marketType": 1,
+      "metricId": "0x1214263f6ef8822d7ba7a067e662f96c821c89c4a174a004eed229cf8bcd8889",
+      "creatorIds": [
+        "0xf658044ec79b53919e4aff4c2f80fe636f1ee9ee78e32f86ec909033df4c6569",
+        "0xdad7e1566c8cc0574d1012e1687f7e595ecd1fbc226c73da751b6e2f04bf6b52",
+        "0x54fc34f8d70d14abc3a882e3788c650cd361705138dcf08c413b52b4996b5809"
+      ],
+      "initialPrice": "1000000000000000000000",
+      "virtualDepth": "1000000"
+    },
+    {
+      "marketId": 101,
+      "marketType": 1,
+      "metricId": "0x572c6e23f9507bda99306ba3756e3cad89bd60f900c9f7b49f18ddb5ffc29178",
+      "creatorIds": [
+        "0x67a41566dd999697b0d100ed713bb9d3c3951beec4c557954b3d6d5fdb5e8f0a",
+        "0x1ee91732fdffaed71e10d19d2c52777d41f57042a6a664daf16ce7b278894484",
+        "0x7ce33401dfabc9f0885372d29d24d182595c893323fd0ead99e279c18143c372"
+      ],
+      "initialPrice": "1000000000000000000000",
+      "virtualDepth": "1000000"
+    }
+  ],
+  "indexMarkets": [
+    {
+      "marketId": 100,
+      "metricIds": [
+        "0x1214263f6ef8822d7ba7a067e662f96c821c89c4a174a004eed229cf8bcd8889",
+        "0xe413a9b8a0a338bea81fdbc24ec4d7f07f9d9d5db96178e52ddb7e7aed2942b3",
+        "0xe914e59631b6a23235063321806320f0c747ea0c4d812bc8453aba6ff18e8402"
+      ],
+      "baselines": [
+        "130800000",
+        "116300000",
+        "115300000"
+      ]
+    },
+    {
+      "marketId": 101,
+      "metricIds": [
+        "0x572c6e23f9507bda99306ba3756e3cad89bd60f900c9f7b49f18ddb5ffc29178",
+        "0xa9113db690b1d4fd4e23b9f06a81a1741f73634432ee96d76e1f8a37718c5bbb",
+        "0x326b33b4fb27ba83843c38218a606f077e60b4c83f1ee94383dc923f414aa6d7"
+      ],
+      "baselines": [
+        "315000000",
+        "203000000",
+        "190000000"
+      ]
+    }
+  ]
+}

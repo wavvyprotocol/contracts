@@ -237,6 +237,11 @@ contract WavvyOracleTest is Test {
         oracle.onReport(validMetadata, abi.encode(METRIC, 1000e18, START_TIME, okStatus));
         assertEq(oracle.latestValue(METRIC), 1000e18);
 
+        // Metadata shorter than the packed workflow rule is rejected.
+        vm.prank(forwarder);
+        vm.expectRevert(WavvyOracle.InvalidMetadata.selector);
+        oracle.onReport(abi.encodePacked(workflowId), abi.encode(METRIC, 1000e18, START_TIME, okStatus));
+
         // A different workflow id is rejected.
         bytes memory wrongWorkflow = abi.encodePacked(keccak256("other-workflow"), workflowName, workflowOwner);
         vm.prank(forwarder);
@@ -297,5 +302,15 @@ contract WavvyOracleTest is Test {
         oracle.setSuspended(METRIC, false);
         assertFalse(oracle.isSuspended(METRIC));
         assertTrue(oracle.isFresh(METRIC));
+    }
+
+    function test_InvalidStatusReportsRejected() public {
+        vm.prank(creReporter);
+        vm.expectRevert(WavvyOracle.InvalidReport.selector);
+        oracle.onReport("", abi.encode(METRIC, 1000e18, START_TIME, uint8(4)));
+
+        vm.prank(creReporter);
+        vm.expectRevert(WavvyOracle.InvalidReport.selector);
+        oracle.onReport("", abi.encode(METRIC, 1000e18, START_TIME, uint8(9)));
     }
 }

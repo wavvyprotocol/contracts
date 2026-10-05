@@ -1,0 +1,27 @@
+{
+  "network": "monadTestnet",
+  "chainId": 10143,
+  "treasury": "0x00000ac095ab728feebef880a3d4801f71732808",
+  "grantsPool": "0x00000ac095ab728feebef880a3d4801f71732808",
+  "timelock": "0x6324498aafea2c27ccb7741831fec84d70705b65",
+  "timelockDelay": 1800,
+  "timelockProposer": "0x00000ac095ab728feebef880a3d4801f71732808",
+  "adminRenounced": true,
+  "riskSeeded": true,
+  "contracts": {
+    "MockUSDC": "0x8ea0e0fbe6e0d60a9008485dcc70d5c02fa67e0a",
+    "WavvyRiskManager": "0x0d31781f1b51842bbcf527cc2cc38d40bd30c860",
+    "WavvyOracle": "0x1487255c64909be8a23629678cbf8c6036e3f417",
+    "WavvyIndexOracle": "0xeb437a720225a8939fc5b1fe471088d05cd4c12f",
+    "WavvyVault": "0x4a960a6807951a678550afb1aecca82247e289a8",
+    "WavvyAMM": "0xbf2332f1610671f9b9082430ab3cab6ad84fc153",
+    "WavvyHouse": "0x8be90fd1f33b4c5824d409068d23a10e3dde86d0",
+    "WavvyPosition": "0xb3df53449c17ba2bc3155059b6443f8b6dc720d6",
+    "WavvyInsurance": "0x7a82bdaee207b0c637c9c9bf44efaffed1ca9bfc",
+    "WavvyFactory": "0xfc7541f4051c13d19f7d5b9f43c3d1a520e35813",
+    "WavvyCreatorRewards": "0x11152f434124de3bdda81df38ba3f64dea825d0e",
+    "WavvyCurator": "0x8f4152f9e9ba54a4d00b532700916c3579334caf",
+    "WavvyTimelock": "0x6324498aafea2c27ccb7741831fec84d70705b65"
+  },
+  "updatedAt": "2026-10-05T11:42:41.788Z"
+}

@@ -32,7 +32,6 @@ contract WavvyFactory is AccessControl, IWavvyFactory {
 
     error MarketExists();
     error InvalidMarketParams();
-    error InvalidPriceSource();
 
     event MarketCreated(
         uint256 indexed marketId,

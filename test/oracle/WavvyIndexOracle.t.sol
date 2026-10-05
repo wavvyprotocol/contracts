@@ -213,4 +213,18 @@ contract WavvyIndexOracleTest is Test {
         vm.expectRevert(WavvyIndexOracle.ConstituentOutOfRange.selector);
         indexOracle.setConstituentFrozen(MARKET_ID, 99, true);
     }
+
+    function test_UnknownMarketReverts() public {
+        vm.startPrank(admin);
+        vm.expectRevert(WavvyIndexOracle.UnknownIndexMarket.selector);
+        indexOracle.setConstituentFrozen(99, 0, true);
+
+        bytes32[] memory metricIds = new bytes32[](1);
+        metricIds[0] = METRIC_A;
+        uint256[] memory baselines = new uint256[](1);
+        baselines[0] = 1e18;
+        vm.expectRevert(WavvyIndexOracle.UnknownIndexMarket.selector);
+        indexOracle.rebalance(99, metricIds, baselines);
+        vm.stopPrank();
+    }
 }

@@ -21,7 +21,6 @@ import { WAD, BPS_DENOMINATOR } from "../utils/Constants.sol";
 /// Full-precision mulDiv uses OpenZeppelin (floor), and is reserved for places
 /// that document it.
 library WavvyMath {
-    error DivByZero();
     error UnsupportedDecimals();
     error NegativeValue();
 

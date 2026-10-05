@@ -10,7 +10,7 @@ const networkName = connection.networkName;
 await deployAll(connection, { networkName, delayMs: 0 });
 await seedAll(connection, {
   networkName,
-  configPath: "seed/example.json",
+  configPath: process.env.SEED_CONFIG ?? "seed/example.json",
   delaySeconds: 5,
   wait: true,
 });

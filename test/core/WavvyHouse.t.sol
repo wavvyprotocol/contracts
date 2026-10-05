@@ -657,4 +657,29 @@ contract WavvyHouseTest is Test {
         assertGe(payout, 0);
         _assertBacking();
     }
+
+    function test_SetMarketPriceSourceGuards() public {
+        vm.startPrank(admin);
+        house.grantRole(house.MARKET_ADMIN_ROLE(), admin);
+
+        vm.expectRevert(WavvyHouse.InvalidPriceSource.selector);
+        house.setMarketPriceSource(99, 2, METRIC);
+
+        vm.expectRevert(WavvyHouse.InvalidPriceSource.selector);
+        house.setMarketPriceSource(99, 0, bytes32(0));
+        vm.stopPrank();
+    }
+
+    function test_PartialCloseUnderwaterSliceReverts() public {
+        _fundTreasury(20_000e18);
+        _fund(whale, 100_000e18);
+
+        uint256 tokenId = _open(alice, true, 100e18, 3e18);
+        _open(whale, false, 150_000e18, 3e18); // mark far below entry
+
+        uint256 size = _sizeOf(tokenId);
+        vm.prank(alice);
+        vm.expectRevert(WavvyHouse.PartialCloseNotViable.selector);
+        house.closePosition(tokenId, size / 5);
+    }
 }

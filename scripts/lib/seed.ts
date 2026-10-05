@@ -28,11 +28,38 @@ type IndexMarketConfig = {
   baselines: string[];
 };
 
+type RiskParamsConfig = {
+  maxLeverage: string;
+  minMargin: string;
+  openInterestCap: string;
+  maintenanceMarginBps: number;
+  liquidationPenaltyBps: number;
+  liquidatorShareBps: number;
+  tradingFeeBps: number;
+  markDeviationPauseBps: number;
+  fundingCoefficient: string;
+  maxFundingRatePerBlock: string;
+  creatorShareBps: number;
+  copyFeeBps: number;
+  curatorShareBps: number;
+};
+
+type TypeDefaultsConfig = { marketType: number; params: RiskParamsConfig };
+
+type GrantConfig = {
+  contract: "WavvyOracle" | "MockUSDC";
+  role: "CRE_REPORTER_ROLE" | "FALLBACK_KEEPER_ROLE" | "MINTER_ROLE";
+  account: `0x${string}`;
+};
+
 type SeedConfig = {
+  typeDefaults?: TypeDefaultsConfig[];
   metrics?: MetricConfig[];
   markets?: MarketConfig[];
   configureMarkets?: Array<{ marketId: number; marketType: number }>;
   indexMarkets?: IndexMarketConfig[];
+  grants?: GrantConfig[];
+  creForwarder?: `0x${string}`;
 };
 
 type SeedOperation = {
@@ -66,12 +93,16 @@ export type SeedOptions = {
   delaySeconds?: number;
   execute?: boolean;
   wait?: boolean;
+  /** State file path, default deployments/<network>-seed.json. */
+  statePath?: string;
 };
 
 export async function seedAll(connection: NetworkConnection, options: SeedOptions): Promise<void> {
   const publicClient = await connection.viem.getPublicClient();
   const [wallet] = await connection.viem.getWalletClients();
   const networkName = options.networkName ?? connection.networkName;
+  const networkType = (hre.config.networks as Record<string, { type?: string } | undefined>)[networkName]?.type;
+  const simulated = networkType === "edr-simulated";
 
   const deployment = loadDeployment(networkName);
   const configPath = options.configPath ?? `seed/${networkName}.json`;
@@ -96,6 +127,27 @@ export async function seedAll(connection: NetworkConnection, options: SeedOption
     });
   };
 
+  for (const defaults of config.typeDefaults ?? []) {
+    const p = defaults.params;
+    add(`setTypeDefaults ${defaults.marketType}`, deployment.contracts.WavvyRiskManager, riskAbi, "setTypeDefaults", [
+      defaults.marketType,
+      {
+        maxLeverage: BigInt(p.maxLeverage),
+        minMargin: BigInt(p.minMargin),
+        openInterestCap: BigInt(p.openInterestCap),
+        maintenanceMarginBps: BigInt(p.maintenanceMarginBps),
+        liquidationPenaltyBps: BigInt(p.liquidationPenaltyBps),
+        liquidatorShareBps: BigInt(p.liquidatorShareBps),
+        tradingFeeBps: BigInt(p.tradingFeeBps),
+        markDeviationPauseBps: BigInt(p.markDeviationPauseBps),
+        fundingCoefficient: BigInt(p.fundingCoefficient),
+        maxFundingRatePerBlock: BigInt(p.maxFundingRatePerBlock),
+        creatorShareBps: BigInt(p.creatorShareBps),
+        copyFeeBps: BigInt(p.copyFeeBps),
+        curatorShareBps: BigInt(p.curatorShareBps),
+      },
+    ]);
+  }
   for (const metric of config.metrics ?? []) {
     add(`registerMetric ${metric.metricId}`, deployment.contracts.WavvyOracle, oracleAbi, "registerMetric", [
       metric.metricId,
@@ -132,8 +184,26 @@ export async function seedAll(connection: NetworkConnection, options: SeedOption
     );
   }
 
-  const statePath = `deployments/${networkName}-seed.json`;
-  const state: { operations: SeedOperation[] } = existsSync(statePath)
+  for (const grant of config.grants ?? []) {
+    const abi = grant.contract === "WavvyOracle" ? oracleAbi : (await hre.artifacts.readArtifact("MockUSDC")).abi as Abi;
+    const contract = (await connection.viem.getContractAt(
+      grant.contract,
+      deployment.contracts[grant.contract] as Address,
+    )) as unknown as { read: Record<string, () => Promise<unknown>> };
+    const role = (await contract.read[grant.role]()) as `0x${string}`;
+    add(`grant ${grant.role} to ${grant.account}`, deployment.contracts[grant.contract], abi, "grantRole", [
+      role,
+      grant.account,
+    ]);
+  }
+  if (config.creForwarder) {
+    add("setCreForwarder", deployment.contracts.WavvyOracle, oracleAbi, "setCreForwarder", [config.creForwarder]);
+  }
+
+  const statePath = options.statePath ?? `deployments/${networkName}-seed.json`;
+  // A simulated chain resets between runs, so recorded progress does not apply:
+  // starting from an empty state keeps a fresh fork consistent.
+  const state: { operations: SeedOperation[] } = !simulated && existsSync(statePath)
     ? JSON.parse(readFileSync(statePath, "utf8"))
     : { operations: [] };
 
@@ -141,8 +211,6 @@ export async function seedAll(connection: NetworkConnection, options: SeedOption
   const proposer = wallet.account;
 
   const minDelay = Number(await timelock.read.getMinDelay());
-  const networkType = (hre.config.networks as Record<string, { type?: string } | undefined>)[networkName]?.type;
-  const simulated = networkType === "edr-simulated";
   const scheduleDelay = BigInt(options.delaySeconds ?? minDelay);
   const executeMode = options.execute === true || options.wait === true;
   const waitMode = options.wait === true;

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.34;
 
 import { Test } from "forge-std/Test.sol";
@@ -12,8 +12,7 @@ import { IWavvyOracle } from "../../contracts/interfaces/IWavvyOracle.sol";
 import { IWavvyVault } from "../../contracts/interfaces/IWavvyVault.sol";
 import { MockERC20 } from "./mocks/Mocks.sol";
 
-/// @dev Exposes the internal settlement routine so zero-value settlement paths
-/// can be tested directly.
+/// @dev Exposes the internal settlement routine so zero-value settlement paths can be tested directly.
 contract HouseHarness is WavvyHouse {
     constructor(IWavvyVault vault_, address treasury_, address admin)
         WavvyHouse(vault_, IWavvyAMM(address(0)), IWavvyOracle(address(0)), IWavvyIndexOracle(address(0)), treasury_, admin)
@@ -32,6 +31,17 @@ contract HouseHarness is WavvyHouse {
         bool allowBadDebt
     ) external returns (uint256 payout, uint256 liquidatorPaid) {
         return _settle(tokenId, holder, marketId, marginIn, pnl, fundingCost, fee, penalty, liquidator, allowBadDebt);
+    }
+
+    function settleSlice(
+        uint256 marketId,
+        uint256 marginBefore,
+        uint256 marginAfter,
+        int256 pnl,
+        int256 fundingCost,
+        uint256 penalty
+    ) external returns (uint256) {
+        return _settleSlice(marketId, marginBefore, marginAfter, pnl, fundingCost, penalty);
     }
 }
 
@@ -97,5 +107,10 @@ contract HouseSettlementHarnessTest is Test {
         // the treasury without any zero-value transfer.
         (uint256 payout,) = harness.settle(1, alice, 1, 100e18, int256(-100e18), int256(0), 0, 0, address(0), true);
         assertEq(payout, 0);
+    }
+
+    function test_SettlementMismatchDetected() public {
+        vm.expectRevert(WavvyHouse.SettlementMismatch.selector);
+        harness.settleSlice(1, 10e18, 999e18, int256(0), int256(0), 0);
     }
 }
