@@ -5,6 +5,10 @@ pragma solidity 0.8.34;
 interface IRiskManager {
     function isMarketPaused(uint256 marketId) external view returns (bool);
 
+    /// @notice True while a market's circuit breaker is tripped. Opens are
+    /// blocked, closes stay available.
+    function circuitBreakerTripped(uint256 marketId) external view returns (bool);
+
     /// @notice Maximum leverage in wad
     function maxLeverage(uint256 marketId) external view returns (uint256);
 

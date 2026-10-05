@@ -40,6 +40,7 @@ contract WavvyAMM is AccessControl, IWavvyAMM {
     error MarketExists();
     error InvalidMarketParams();
     error MarketPaused();
+    error CircuitBreakerActive();
     error ZeroAmount();
     error ReserveDepleted();
     error OpenInterestCapExceeded();
@@ -79,6 +80,7 @@ contract WavvyAMM is AccessControl, IWavvyAMM {
         AMMMarket storage market = _markets[marketId];
         if (!market.exists) revert UnknownMarket();
         if (risk.isMarketPaused(marketId)) revert MarketPaused();
+        if (risk.circuitBreakerTripped(marketId)) revert CircuitBreakerActive();
         if (size == 0) revert ZeroAmount();
 
         _accrue(market, marketId, indexPrice);

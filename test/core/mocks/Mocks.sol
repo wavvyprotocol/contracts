@@ -41,8 +41,14 @@ contract MockRiskManager is IRiskManager {
 
     mapping(uint256 => Config) private _configs;
 
+    mapping(uint256 => bool) private _breakerTripped;
+
     function setConfig(uint256 marketId, Config calldata config) external {
         _configs[marketId] = config;
+    }
+
+    function setCircuitBreakerTripped(uint256 marketId, bool tripped) external {
+        _breakerTripped[marketId] = tripped;
     }
 
     function setPaused(uint256 marketId, bool paused) external {
@@ -63,6 +69,10 @@ contract MockRiskManager is IRiskManager {
 
     function isMarketPaused(uint256 marketId) external view override returns (bool) {
         return _configs[marketId].paused;
+    }
+
+    function circuitBreakerTripped(uint256 marketId) external view override returns (bool) {
+        return _breakerTripped[marketId];
     }
 
     function maxLeverage(uint256 marketId) external view override returns (uint256) {

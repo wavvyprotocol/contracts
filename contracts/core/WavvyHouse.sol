@@ -55,6 +55,7 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
     mapping(uint256 => PriceSource) public priceSources;
 
     error MarketPaused();
+    error CircuitBreakerActive();
     error MarketUnavailable();
     error LeverageTooLow();
     error LeverageTooHigh();
@@ -170,6 +171,7 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         _requireWired();
         if (!amm.marketExists(marketId)) revert MarketUnavailable();
         if (risk.isMarketPaused(marketId)) revert MarketPaused();
+        if (risk.circuitBreakerTripped(marketId)) revert CircuitBreakerActive();
         if (!_priceSourceFresh(marketId)) revert MarketUnavailable();
         if (margin == 0 || margin < risk.minMargin(marketId)) revert InsufficientMargin();
         if (leverage < WAD) revert LeverageTooLow();

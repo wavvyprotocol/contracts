@@ -18,8 +18,9 @@ import { WAD, BPS_DENOMINATOR } from "../utils/Constants.sol";
 
 /// @notice Single entry point for fixed-point math. Business contracts never
 /// call PRBMath directly, so rounding conventions stay in one place.
-/// Unsigned wad helpers use PRBMath UD60x18 (half-up rounding). Full-precision
-/// mulDiv uses OpenZeppelin (floor), and is reserved for places that document it.
+/// Wad helpers use PRBMath UD60x18 and SD59x18, which truncate toward zero.
+/// Full-precision mulDiv uses OpenZeppelin (floor), and is reserved for places
+/// that document it.
 library WavvyMath {
     error DivByZero();
     error UnsupportedDecimals();
