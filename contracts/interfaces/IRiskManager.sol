@@ -37,4 +37,15 @@ interface IRiskManager {
     /// @notice Funding rate cap per block in wad. Derived from an annualized
     /// target offchain; never hardcoded onchain.
     function maxFundingRatePerBlock(uint256 marketId) external view returns (uint256);
+
+    /// @notice Share of the trading fee escrowed for the underlying creators,
+    /// in basis points.
+    function creatorShareBps(uint256 marketId) external view returns (uint256);
+
+    /// @notice Copy fee on copier net profit, in basis points.
+    function copyFeeBps(uint256 marketId) external view returns (uint256);
+
+    /// @notice Share of the copy fee paid to the curator, in basis points. The
+    /// remainder goes to the protocol.
+    function curatorShareBps(uint256 marketId) external view returns (uint256);
 }

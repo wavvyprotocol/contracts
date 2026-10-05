@@ -2,13 +2,9 @@
 pragma solidity 0.8.34;
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { IPosition } from "../../../contracts/interfaces/IPosition.sol";
 import { IRiskManager } from "../../../contracts/interfaces/IRiskManager.sol";
-import { IWavvyIndexOracle } from "../../../contracts/interfaces/IWavvyIndexOracle.sol";
-import { IWavvyInsurance } from "../../../contracts/interfaces/IWavvyInsurance.sol";
-import { IWavvyOracle } from "../../../contracts/interfaces/IWavvyOracle.sol";
-import { IWavvyVault } from "../../../contracts/interfaces/IWavvyVault.sol";
 
+/// @notice Configurable ERC20 for vault decimal tests.
 contract MockERC20 is ERC20 {
     uint8 private immutable _tokenDecimals;
 
@@ -25,66 +21,6 @@ contract MockERC20 is ERC20 {
     }
 }
 
-contract MockOracle is IWavvyOracle {
-    mapping(bytes32 => uint256) private _twaps;
-    mapping(bytes32 => bool) private _fresh;
-
-    function set(bytes32 metricId, uint256 twap, bool fresh) external {
-        _twaps[metricId] = twap;
-        _fresh[metricId] = fresh;
-    }
-
-    function getTWAP(bytes32 metricId) external view override returns (uint256) {
-        return _twaps[metricId];
-    }
-
-    function getTWAP(bytes32 metricId, uint64) external view override returns (uint256) {
-        return _twaps[metricId];
-    }
-
-    function latestValue(bytes32 metricId) external view override returns (uint256) {
-        return _twaps[metricId];
-    }
-
-    function lastUpdateAt(bytes32) external pure override returns (uint64) {
-        return 0;
-    }
-
-    function isFresh(bytes32 metricId) external view override returns (bool) {
-        return _fresh[metricId];
-    }
-
-    function isSuspended(bytes32) external pure override returns (bool) {
-        return false;
-    }
-
-    function isFrozen(bytes32) external pure override returns (bool) {
-        return false;
-    }
-}
-
-contract MockIndexOracle is IWavvyIndexOracle {
-    mapping(uint256 => uint256) private _values;
-    mapping(uint256 => bool) private _valid;
-
-    function set(uint256 marketId, uint256 value, bool valid) external {
-        _values[marketId] = value;
-        _valid[marketId] = valid;
-    }
-
-    function indexValue(uint256 marketId) external view override returns (uint256 value, bool valid) {
-        return (_values[marketId], _valid[marketId]);
-    }
-
-    function constituentCount(uint256) external pure override returns (uint256) {
-        return 0;
-    }
-
-    function constituent(uint256, uint256) external pure override returns (bytes32, uint256, bool) {
-        return (bytes32(0), 0, false);
-    }
-}
-
 contract MockRiskManager is IRiskManager {
     struct Config {
         bool paused;
@@ -98,6 +34,9 @@ contract MockRiskManager is IRiskManager {
         uint256 markDeviationPauseBps;
         uint256 fundingCoefficient;
         uint256 maxFundingRatePerBlock;
+        uint256 creatorShareBps;
+        uint256 copyFeeBps;
+        uint256 curatorShareBps;
     }
 
     mapping(uint256 => Config) private _configs;
@@ -165,73 +104,16 @@ contract MockRiskManager is IRiskManager {
     function maxFundingRatePerBlock(uint256 marketId) external view override returns (uint256) {
         return _configs[marketId].maxFundingRatePerBlock;
     }
-}
 
-contract MockPosition is IPosition {
-    error NoToken();
-
-    uint256 private _nextId = 1;
-    uint256 public totalMargin;
-
-    mapping(uint256 => PositionData) private _positions;
-    mapping(uint256 => address) private _owners;
-    mapping(uint256 => bool) private _exists;
-
-    function mintPosition(address to, PositionData calldata data) external override returns (uint256 tokenId) {
-        tokenId = _nextId++;
-        _positions[tokenId] = data;
-        _owners[tokenId] = to;
-        _exists[tokenId] = true;
-        totalMargin += data.margin;
+    function creatorShareBps(uint256 marketId) external view override returns (uint256) {
+        return _configs[marketId].creatorShareBps;
     }
 
-    function burnPosition(uint256 tokenId) external override {
-        if (!_exists[tokenId]) revert NoToken();
-        totalMargin -= _positions[tokenId].margin;
-        delete _positions[tokenId];
-        delete _owners[tokenId];
-        delete _exists[tokenId];
+    function copyFeeBps(uint256 marketId) external view override returns (uint256) {
+        return _configs[marketId].copyFeeBps;
     }
 
-    function updatePosition(uint256 tokenId, uint256 size, uint256 margin, int256 lastFundingGrowth)
-        external
-        override
-    {
-        if (!_exists[tokenId]) revert NoToken();
-        PositionData storage p = _positions[tokenId];
-        totalMargin = totalMargin - p.margin + margin;
-        p.size = size;
-        p.margin = margin;
-        p.lastFundingGrowth = lastFundingGrowth;
-    }
-
-    function getPosition(uint256 tokenId) external view override returns (PositionData memory) {
-        if (!_exists[tokenId]) revert NoToken();
-        return _positions[tokenId];
-    }
-
-    function ownerOf(uint256 tokenId) external view override returns (address) {
-        if (!_exists[tokenId]) revert NoToken();
-        return _owners[tokenId];
-    }
-
-    function exists(uint256 tokenId) external view override returns (bool) {
-        return _exists[tokenId];
-    }
-}
-
-contract MockInsurance is IWavvyInsurance {
-    IWavvyVault public immutable vault;
-
-    constructor(IWavvyVault vault_) {
-        vault = vault_;
-    }
-
-    function coverBadDebt(uint256 amount) external override returns (uint256 covered) {
-        uint256 balance = vault.balanceOf(address(this));
-        covered = amount < balance ? amount : balance;
-        if (covered > 0) {
-            vault.transfer(address(this), msg.sender, covered);
-        }
+    function curatorShareBps(uint256 marketId) external view override returns (uint256) {
+        return _configs[marketId].curatorShareBps;
     }
 }

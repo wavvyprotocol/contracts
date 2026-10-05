@@ -91,6 +91,22 @@ contract WavvyVaultTest is Test {
         vault.transfer(alice, bob, 2e18);
     }
 
+    function test_SystemRolePullsOnlyIntoItself() public {
+        _deposit(alice, 1_000_000);
+
+        bytes32 systemRole = vault.SYSTEM_ROLE();
+        vm.prank(admin);
+        vault.grantRole(systemRole, address(this));
+
+        // Pulling a user's free balance into the system contract is allowed.
+        vault.transfer(alice, address(this), 0.5e18);
+        assertEq(vault.balanceOf(address(this)), 0.5e18);
+
+        // Sending it to a third party is not.
+        vm.expectRevert(WavvyVault.UnauthorizedTransfer.selector);
+        vault.transfer(alice, bob, 0.1e18);
+    }
+
     function test_EighteenDecimalTokenIsIdentity() public {
         MockERC20 token18 = new MockERC20("Wad", "WAD", 18);
         WavvyVault vault18 = new WavvyVault(token18, admin);

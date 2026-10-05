@@ -8,6 +8,9 @@ import { WavvyMath } from "../lib/WavvyMath.sol";
 import { IPosition } from "../interfaces/IPosition.sol";
 import { IRiskManager } from "../interfaces/IRiskManager.sol";
 import { IWavvyAMM } from "../interfaces/IWavvyAMM.sol";
+import { IWavvyCreatorRewards } from "../interfaces/IWavvyCreatorRewards.sol";
+import { IWavvyCurator } from "../interfaces/IWavvyCurator.sol";
+import { IWavvyFactory } from "../interfaces/IWavvyFactory.sol";
 import { IWavvyHouse } from "../interfaces/IWavvyHouse.sol";
 import { IWavvyIndexOracle } from "../interfaces/IWavvyIndexOracle.sol";
 import { IWavvyInsurance } from "../interfaces/IWavvyInsurance.sol";
@@ -15,13 +18,19 @@ import { IWavvyOracle } from "../interfaces/IWavvyOracle.sol";
 import { IWavvyVault } from "../interfaces/IWavvyVault.sol";
 import { BPS_DENOMINATOR, LIQUIDATION_TARGET_BUFFER, WAD } from "../utils/Constants.sol";
 
-/// @notice Composes the vault, the vAMM, and the position ledger into open, close, and liquidation flows.
+/// @notice Composes the vault, the vAMM, the position ledger, the creator
+/// escrow, and the curator registry into open, close, and liquidation flows.
 ///
-/// Position ownership always resolves through the position token's current holder, so a transferred token moves the whole position, margin included.
-/// Margin lives in the position contract's vault account, a position has no claim on its opener address after opening.
+/// Position ownership always resolves through the position token's current
+/// holder, so a transferred token moves the whole position, margin included.
+/// Margin lives in the position contract's vault account; a position has no
+/// claim on its opener address after opening.
 ///
-/// PnL is settled against the treasury account with the insurance fund as the backstop, the vault moves value between internal accounts only.
+/// PnL settles against the treasury account with the insurance fund as the
+/// backstop; the vault moves value between internal accounts only.
 contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
+    bytes32 public constant MARKET_ADMIN_ROLE = keccak256("MARKET_ADMIN_ROLE");
+
     uint8 internal constant PRICE_SOURCE_METRIC = 0;
     uint8 internal constant PRICE_SOURCE_INDEX = 1;
 
@@ -32,11 +41,15 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
 
     IWavvyVault public immutable vault;
     IWavvyAMM public immutable amm;
-    IPosition public immutable position;
     IWavvyOracle public immutable oracle;
     IWavvyIndexOracle public immutable indexOracle;
-    IRiskManager public immutable risk;
-    IWavvyInsurance public immutable insurance;
+
+    IPosition public position;
+    IRiskManager public risk;
+    IWavvyInsurance public insurance;
+    IWavvyFactory public factory;
+    IWavvyCreatorRewards public creatorRewards;
+    IWavvyCurator public curator;
 
     address public treasury;
     mapping(uint256 => PriceSource) public priceSources;
@@ -56,6 +69,7 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
     error ProtocolBufferExhausted();
     error InvalidPriceSource();
     error SettlementMismatch();
+    error SystemNotWired();
     error ZeroAmount();
 
     event PositionOpened(
@@ -87,29 +101,45 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
     );
     event FundingSettled(uint256 indexed tokenId, int256 fundingCost);
     event BadDebt(uint256 indexed tokenId, uint256 deficit, uint256 covered);
+    event FeeSplit(uint256 indexed marketId, uint256 protocolShare, uint256 creatorShare);
+    event CopyFeeSettled(uint256 indexed callId, uint256 tokenId, uint256 curatorShare, uint256 protocolShare);
     event TreasuryUpdated(address indexed treasury);
+    event SystemWired(address position, address risk, address insurance, address factory, address creatorRewards, address curator);
     event PriceSourceSet(uint256 indexed marketId, uint8 kind, bytes32 metricId);
 
     constructor(
         IWavvyVault vault_,
         IWavvyAMM amm_,
-        IPosition position_,
         IWavvyOracle oracle_,
         IWavvyIndexOracle indexOracle_,
-        IRiskManager risk_,
-        IWavvyInsurance insurance_,
         address treasury_,
         address admin
     ) {
         vault = vault_;
         amm = amm_;
-        position = position_;
         oracle = oracle_;
         indexOracle = indexOracle_;
-        risk = risk_;
-        insurance = insurance_;
         treasury = treasury_;
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
+    }
+
+    /// @notice Wire the contracts that are deployed after the house. Admin
+    /// only; the admin role moves to the timelock at handover.
+    function setSystem(
+        address position_,
+        address risk_,
+        address insurance_,
+        address factory_,
+        address creatorRewards_,
+        address curator_
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        position = IPosition(position_);
+        risk = IRiskManager(risk_);
+        insurance = IWavvyInsurance(insurance_);
+        factory = IWavvyFactory(factory_);
+        creatorRewards = IWavvyCreatorRewards(creatorRewards_);
+        curator = IWavvyCurator(curator_);
+        emit SystemWired(position_, risk_, insurance_, factory_, creatorRewards_, curator_);
     }
 
     function setTreasury(address newTreasury) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -119,10 +149,11 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
     }
 
     /// @notice Point a market at its price source: a metric TWAP in the metric
-    /// oracle, or the index oracle for basket markets.
+    /// oracle, or the index oracle for basket markets. The factory calls this
+    /// at market creation.
     function setMarketPriceSource(uint256 marketId, uint8 kind, bytes32 metricId)
         external
-        onlyRole(DEFAULT_ADMIN_ROLE)
+        onlyRole(MARKET_ADMIN_ROLE)
     {
         if (kind > PRICE_SOURCE_INDEX) revert InvalidPriceSource();
         if (kind == PRICE_SOURCE_METRIC && metricId == bytes32(0)) revert InvalidPriceSource();
@@ -136,6 +167,7 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         nonReentrant
         returns (uint256 tokenId)
     {
+        _requireWired();
         if (!amm.marketExists(marketId)) revert MarketUnavailable();
         if (risk.isMarketPaused(marketId)) revert MarketPaused();
         if (!_priceSourceFresh(marketId)) revert MarketUnavailable();
@@ -169,7 +201,7 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         if (vault.balanceOf(msg.sender) < margin + fee) revert InsufficientMargin();
 
         vault.transfer(msg.sender, address(position), margin);
-        if (fee > 0) vault.transfer(msg.sender, treasury, fee);
+        _chargeOpenFees(msg.sender, marketId, fee);
 
         tokenId = position.mintPosition(
             msg.sender,
@@ -185,11 +217,14 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
             })
         );
 
+        if (callId != 0) curator.recordCopy(callId, tokenId);
+
         emit PositionOpened(tokenId, marketId, msg.sender, isLong, size, entryPrice, margin, fee, callId);
     }
 
     /// @inheritdoc IWavvyHouse
     function closePosition(uint256 tokenId, uint256 closeSize) external nonReentrant returns (uint256 payout) {
+        _requireWired();
         if (!position.exists(tokenId)) revert PositionNotFound();
         address holder = position.ownerOf(tokenId);
         if (msg.sender != holder) revert NotNFTOwner();
@@ -200,22 +235,26 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         uint256 indexPrice = _indexPrice(p.marketId);
         int256 growth = amm.accrueFunding(p.marketId, indexPrice);
         CloseResult memory r = _executeClose(p, closeSize, growth, indexPrice, risk.tradingFeeBps(p.marketId), 0);
+        uint256 copyFee = _copyFeeFor(p, r.pnl, r.fundingCost);
 
         if (closeSize == p.size) {
             position.updatePosition(tokenId, 0, 0, growth);
-            payout = _settle(tokenId, holder, p.marketId, r.marginOut, r.pnl, r.fundingCost, r.fee, 0, address(0), true);
+            payout = _settle(tokenId, holder, p.marketId, r.marginOut, r.pnl, r.fundingCost, r.fee + copyFee, 0, address(0), true);
             position.burnPosition(tokenId);
         } else {
             position.updatePosition(tokenId, p.size - closeSize, p.margin - r.marginOut, growth);
-            payout = _settle(tokenId, holder, p.marketId, r.marginOut, r.pnl, r.fundingCost, r.fee, 0, address(0), false);
+            payout = _settle(tokenId, holder, p.marketId, r.marginOut, r.pnl, r.fundingCost, r.fee + copyFee, 0, address(0), false);
         }
 
+        if (copyFee > 0) _distributeCopyFee(p.callId, p.marketId, copyFee);
+
         emit FundingSettled(tokenId, r.fundingCost);
-        emit PositionClosed(tokenId, holder, closeSize, r.exitPrice, payout, r.fee);
+        emit PositionClosed(tokenId, holder, closeSize, r.exitPrice, payout, r.fee + copyFee);
     }
 
     /// @inheritdoc IWavvyHouse
     function liquidate(uint256 tokenId) external nonReentrant returns (uint256 payout, uint256 closedSize) {
+        _requireWired();
         if (!position.exists(tokenId)) revert PositionNotFound();
         address holder = position.ownerOf(tokenId);
         IPosition.PositionData memory p = position.getPosition(tokenId);
@@ -311,7 +350,10 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
     /// @dev Funding checkpoint, effective index price, and mark for a
     /// liquidation. A stale or missing index falls back to the mark price so
     /// positions can still be wound down.
-    function _liquidationContext(uint256 marketId) internal returns (uint256 effectiveIndex, int256 growth, uint256 mark) {
+    function _liquidationContext(uint256 marketId)
+        internal
+        returns (uint256 effectiveIndex, int256 growth, uint256 mark)
+    {
         (uint256 indexPrice, bool indexValid) = _indexPriceSafe(marketId);
         mark = amm.markPrice(marketId);
         if (indexValid) {
@@ -321,6 +363,62 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
             effectiveIndex = mark;
             growth = amm.fundingGrowth(marketId);
         }
+    }
+
+    /// @dev Split the opening fee between the protocol treasury and the
+    /// market's creators. The creator share is escrowed per creator id, split
+    /// equally for index markets.
+    function _chargeOpenFees(address user, uint256 marketId, uint256 fee) internal {
+        if (fee == 0) return;
+        uint256 creatorShare = WavvyMath.mulBps(fee, risk.creatorShareBps(marketId));
+        uint256 protocolShare = fee - creatorShare;
+
+        if (protocolShare > 0) vault.transfer(user, treasury, protocolShare);
+
+        if (creatorShare > 0) {
+            bytes32[] memory creators = factory.creatorIdsOf(marketId);
+            uint256 count = creators.length;
+            if (count == 0) {
+                vault.transfer(user, treasury, creatorShare);
+                emit FeeSplit(marketId, fee, 0);
+                return;
+            }
+            uint256 per = creatorShare / count;
+            for (uint256 i; i < count; ++i) {
+                uint256 amount = i == count - 1 ? creatorShare - per * (count - 1) : per;
+                if (amount == 0) continue;
+                vault.transfer(user, address(creatorRewards), amount);
+                creatorRewards.accrue(creators[i], amount);
+            }
+            emit FeeSplit(marketId, protocolShare, creatorShare);
+        } else {
+            emit FeeSplit(marketId, fee, 0);
+        }
+    }
+
+    /// @dev Copy fee on a profitable close of an attributed position. Zero
+    /// when the position mirrors no call or the copier made no profit.
+    function _copyFeeFor(IPosition.PositionData memory p, int256 pnl, int256 fundingCost)
+        internal
+        view
+        returns (uint256)
+    {
+        if (p.callId == 0) return 0;
+        int256 profit = WavvyMath.subSigned(pnl, fundingCost);
+        if (profit <= 0) return 0;
+        return WavvyMath.mulBps(uint256(profit), risk.copyFeeBps(p.marketId));
+    }
+
+    /// @dev Move the curator share of a copy fee from the treasury into the
+    /// curator contract's vault account and credit it. The protocol share
+    /// stays in the treasury.
+    function _distributeCopyFee(uint256 callId, uint256 marketId, uint256 copyFee) internal {
+        uint256 curatorShare = WavvyMath.mulBps(copyFee, risk.curatorShareBps(marketId));
+        if (curatorShare > 0) {
+            vault.transfer(treasury, address(curator), curatorShare);
+            curator.creditCopyFee(callId, curatorShare);
+        }
+        emit CopyFeeSettled(callId, 0, curatorShare, copyFee - curatorShare);
     }
 
     /// @dev Settles a liquidation slice where the position keeps its equity:
@@ -346,8 +444,9 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
             vault.transfer(address(position), treasury, penalty);
             _payLiquidationShares(marketId, msg.sender, penalty);
         }
-        uint256 expected =
-            uint256(WavvyMath.subSigned(WavvyMath.addSigned(WavvyMath.signed(marginBefore), net), WavvyMath.signed(penalty)));
+        uint256 expected = uint256(
+            WavvyMath.subSigned(WavvyMath.addSigned(WavvyMath.signed(marginBefore), net), WavvyMath.signed(penalty))
+        );
         if (expected != marginAfter) revert SettlementMismatch();
     }
 
@@ -373,9 +472,8 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         address liquidator,
         bool allowBadDebt
     ) internal returns (uint256 payout) {
-        int256 net = WavvyMath.subSigned(
-            WavvyMath.subSigned(pnl, fundingCost), WavvyMath.signed(fee + penalty)
-        );
+        int256 net =
+            WavvyMath.subSigned(WavvyMath.subSigned(pnl, fundingCost), WavvyMath.signed(fee + penalty));
         int256 payoutSigned = WavvyMath.addSigned(WavvyMath.signed(marginIn), net);
 
         if (payoutSigned < 0) {
@@ -501,5 +599,15 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
             }
         }
         return indexOracle.indexValue(marketId);
+    }
+
+    function _requireWired() internal view {
+        if (
+            address(position) == address(0) || address(risk) == address(0) || address(insurance) == address(0)
+                || address(factory) == address(0) || address(creatorRewards) == address(0)
+                || address(curator) == address(0)
+        ) {
+            revert SystemNotWired();
+        }
     }
 }

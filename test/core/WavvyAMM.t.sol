@@ -36,7 +36,10 @@ contract WavvyAMMTest is Test {
                 tradingFeeBps: 10,
                 markDeviationPauseBps: 500,
                 fundingCoefficient: 1e18,
-                maxFundingRatePerBlock: 1e15
+                maxFundingRatePerBlock: 1e15,
+                creatorShareBps: 3000,
+                copyFeeBps: 500,
+                curatorShareBps: 5000
             })
         );
         amm.grantRole(amm.MARKET_ADMIN_ROLE(), admin);

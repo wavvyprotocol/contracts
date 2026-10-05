@@ -17,6 +17,10 @@ contract WavvyVault is AccessControl, ReentrancyGuard, IWavvyVault {
     using SafeERC20 for IERC20;
 
     bytes32 public constant HOUSE_ROLE = keccak256("HOUSE_ROLE");
+    /// @notice Protocol contracts that may pull a user's free balance into
+    /// their own account during their own user-triggered flows (for example a
+    /// curator locking a stake). They can never move funds to a third party.
+    bytes32 public constant SYSTEM_ROLE = keccak256("SYSTEM_ROLE");
 
     IERC20 public immutable token;
     uint8 public immutable tokenDecimals;
@@ -63,13 +67,17 @@ contract WavvyVault is AccessControl, ReentrancyGuard, IWavvyVault {
         emit Withdrawn(msg.sender, amount, wad);
     }
 
-    /// @notice Move `amount` wad between internal accounts. A caller may move
-    /// its own balance; the house role may move any account because it settles
-    /// positions, liquidations, and fees.
+    /// @notice Move `amount` wad between internal accounts. A caller may move its
+    /// own balance; the house role may move any account because it settles
+    /// positions, liquidations, and fees; a system contract may pull a user's
+    /// free balance into its own account only.
     function transfer(address from, address to, uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
         if (to == address(0)) revert ZeroAmount();
-        if (msg.sender != from && !hasRole(HOUSE_ROLE, msg.sender)) revert UnauthorizedTransfer();
+        bool isSelf = msg.sender == from;
+        bool isHouse = hasRole(HOUSE_ROLE, msg.sender);
+        bool isSystemPull = !isHouse && to == msg.sender && hasRole(SYSTEM_ROLE, msg.sender);
+        if (!isSelf && !isHouse && !isSystemPull) revert UnauthorizedTransfer();
         uint256 balance = balanceOf[from];
         if (balance < amount) revert InsufficientBalance();
         balanceOf[from] = balance - amount;
