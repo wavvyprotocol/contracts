@@ -15,8 +15,6 @@ uint256 constant INDEX_BASE = 1000e18;
 // stable when constituent growth approaches the extreme downside case.
 uint256 constant INDEX_FLOOR = 100e18;
 
-// Seconds in a 365-day year. Used only for display-side derivations.
-uint256 constant SECONDS_PER_YEAR = 31_536_000;
 
 // Ring buffer capacity per oracle metric. At an hourly interval this is roughly 21 days of history, enough for the 7 day music TWAP window.
 uint16 constant MAX_OBSERVATIONS = 512;

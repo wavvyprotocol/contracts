@@ -11,8 +11,7 @@ import {
     add as sdAdd,
     sub as sdSub,
     gt as sdGt,
-    lt as sdLt,
-    isZero as sdIsZero
+    lt as sdLt
 } from "@prb/math/src/SD59x18.sol";
 import { WAD, BPS_DENOMINATOR } from "../utils/Constants.sol";
 
@@ -24,6 +23,7 @@ import { WAD, BPS_DENOMINATOR } from "../utils/Constants.sol";
 library WavvyMath {
     error DivByZero();
     error UnsupportedDecimals();
+    error NegativeValue();
 
     /// @notice Scale a token amount with `decimals` up to 18 decimals.
     function toWad(uint256 amount, uint8 decimals) internal pure returns (uint256) {
@@ -105,24 +105,16 @@ library WavvyMath {
         return x;
     }
 
-    function toSigned(uint256 x) internal pure returns (int256) {
-        return int256(x);
-    }
-
     /// @notice Convert a signed wad to unsigned, reverting on negative input.
     function toUnsigned(int256 x) internal pure returns (uint256) {
         if (x < 0) {
-            revert DivByZero();
+            revert NegativeValue();
         }
         return uint256(x);
     }
 
     function absSigned(int256 x) internal pure returns (uint256) {
         return x < 0 ? uint256(-x) : uint256(x);
-    }
-
-    function isNegative(int256 x) internal pure returns (bool) {
-        return sdLt(sd(x), sd(0));
     }
 
     function addSigned(int256 a, int256 b) internal pure returns (int256) {
@@ -142,10 +134,6 @@ library WavvyMath {
     }
 
     /// @notice a * b / c with a signed result, using SD59x18 semantics.
-    function mulDivSigned(int256 a, int256 b, int256 c) internal pure returns (int256) {
-        return sdUnwrap(sdDiv(sdMul(sd(a), sd(b)), sd(c)));
-    }
-
     /// @notice Divide a signed wad value by a plain integer count.
     function divSignedByCount(int256 a, uint256 count) internal pure returns (int256) {
         return sdUnwrap(sdDiv(sd(a), sd(int256(count) * int256(WAD))));
@@ -154,10 +142,6 @@ library WavvyMath {
     /// @notice Multiply a signed wad value by a plain integer count.
     function mulSignedByCount(int256 a, uint256 count) internal pure returns (int256) {
         return sdUnwrap(sdMul(sd(a), sd(int256(count) * int256(WAD))));
-    }
-
-    function isZeroSigned(int256 a) internal pure returns (bool) {
-        return sdIsZero(sd(a));
     }
 
     function signed(uint256 x) internal pure returns (int256) {

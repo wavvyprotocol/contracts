@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.34;
 
-// @notice Observation ring buffer and TWAP computation shared by the metric oracle and the index oracle.
+/// @notice Observation ring buffer and TWAP computation shared by the metric oracle and the index oracle.
 // Values are 18-decimal fixed point, the cumulative is value-seconds.
 library TWAPLib {
     struct Observation {
@@ -24,7 +24,7 @@ library TWAPLib {
     error TimestampNotMonotonic();
     error InvalidCapacity();
 
-    // @notice Append an observation. The first write starts the series, later writes must carry a strictly increasing timestamp.
+    /// @notice Append an observation. The first write starts the series, later writes must carry a strictly increasing timestamp.
     // Once the buffer holds `capacity` observations the oldest slot is overwritten.
     // The capacity is fixed by the first write.
     function write(State storage self, uint256 value, uint64 timestamp, uint16 capacity) internal {
@@ -74,28 +74,12 @@ library TWAPLib {
     /// @notice Value-seconds accumulated up to `target`, interpolated between
     /// the surrounding observations and clamped to the oldest observation.
     function cumulativeAt(State storage self, uint64 target) internal view returns (uint256) {
+        if (self.observations.length == 0) revert NoObservations();
         Observation storage o = _surrounding(self, target);
         if (target <= o.timestamp) {
             return o.cumulative;
         }
         return o.cumulative + o.value * (target - o.timestamp);
-    }
-
-    function oldestTimestamp(State storage self) internal view returns (uint64) {
-        if (self.observations.length == 0) revert NoObservations();
-        return _obs(self, 0).timestamp;
-    }
-
-    function latestValue(State storage self) internal view returns (uint256) {
-        return self.lastValue;
-    }
-
-    function latestTimestamp(State storage self) internal view returns (uint64) {
-        return self.lastTimestamp;
-    }
-
-    function observationCount(State storage self) internal view returns (uint256) {
-        return self.observations.length;
     }
 
     /// @dev Physical slot for a logical position: 0 is the oldest observation,

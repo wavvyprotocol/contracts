@@ -1,12 +1,17 @@
+import { existsSync } from "node:fs";
 import hardhatToolboxViemPlugin from "@nomicfoundation/hardhat-toolbox-viem";
 import { configVariable, defineConfig } from "hardhat/config";
+
+if (existsSync(".env")) {
+  process.loadEnvFile(".env");
+}
 
 export default defineConfig({
   plugins: [hardhatToolboxViemPlugin],
   solidity: {
     version: "0.8.34",
     settings: {
-      evmVersion: "osaka",
+      evmVersion: "prague",
       optimizer: {
         enabled: true,
         runs: 200,
@@ -55,6 +60,7 @@ export default defineConfig({
   chainDescriptors: {
     10143: {
       name: "MonadTestnet",
+      chainType: "l1",
       blockExplorers: {
         etherscan: {
           name: "Monadscan",
@@ -65,6 +71,8 @@ export default defineConfig({
     },
     143: {
       name: "MonadMainnet",
+      chainType: "l1",
+      hardforkHistory: { prague: { blockNumber: 0 } },
       blockExplorers: {
         etherscan: {
           name: "Monadscan",

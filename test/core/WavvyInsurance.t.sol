@@ -106,4 +106,20 @@ contract WavvyInsuranceTest is Test {
         );
         insurance.withdraw(stranger, 1e18);
     }
+
+    function test_FundAndWithdrawAreWadAcrossDecimals() public {
+        MockERC20 usdc6 = new MockERC20("USD Coin", "USDC6", 6);
+        WavvyVault vault6 = new WavvyVault(usdc6, admin);
+        WavvyInsurance insurance6 = new WavvyInsurance(vault6, admin);
+
+        usdc6.mint(admin, 1_000_000);
+        vm.startPrank(admin);
+        usdc6.approve(address(insurance6), 1_000_000);
+        insurance6.fund(1e18);
+        assertEq(insurance6.balance(), 1e18);
+        insurance6.withdraw(admin, 1e18);
+        assertEq(vault6.balanceOf(admin), 1e18);
+        assertEq(insurance6.balance(), 0);
+        vm.stopPrank();
+    }
 }

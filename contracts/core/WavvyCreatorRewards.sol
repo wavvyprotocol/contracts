@@ -40,11 +40,13 @@ contract WavvyCreatorRewards is AccessControl, IWavvyCreatorRewards {
     error ClaimWindowActive();
     error NothingToSweep();
     error InvalidAddress();
+    error InvalidParams();
 
     event Accrued(bytes32 indexed creatorId, uint256 amount);
     event WalletLinked(bytes32 indexed creatorId, address indexed wallet);
     event WalletChangeRequested(bytes32 indexed creatorId, address indexed wallet, uint64 executableAt);
     event WalletChangeFinalized(bytes32 indexed creatorId, address indexed wallet);
+    event WalletChangeCancelled(bytes32 indexed creatorId);
     event Claimed(bytes32 indexed creatorId, address indexed wallet, uint256 amount);
     event Swept(bytes32 indexed creatorId, address indexed grantsPool, uint256 amount);
     event ClaimWindowUpdated(uint64 claimWindow);
@@ -122,12 +124,23 @@ contract WavvyCreatorRewards is AccessControl, IWavvyCreatorRewards {
         emit Swept(creatorId, grantsPool, amount);
     }
 
+    /// @notice Cancel a pending wallet replacement before it is finalized.
+    function cancelWalletChange(bytes32 creatorId) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        Creator storage creator = _creators[creatorId];
+        if (creator.pendingWallet == address(0)) revert NoPendingWallet();
+        creator.pendingWallet = address(0);
+        creator.pendingSince = 0;
+        emit WalletChangeCancelled(creatorId);
+    }
+
     function setClaimWindow(uint64 claimWindow_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (claimWindow_ == 0) revert InvalidParams();
         claimWindow = claimWindow_;
         emit ClaimWindowUpdated(claimWindow_);
     }
 
     function setWalletChangeDelay(uint64 delay) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (delay == 0) revert InvalidParams();
         walletChangeDelay = delay;
         emit WalletChangeDelayUpdated(delay);
     }

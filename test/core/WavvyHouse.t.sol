@@ -372,6 +372,9 @@ contract WavvyHouseTest is Test {
         uint256 sizeBefore = _sizeOf(tokenId);
 
         _open(whale, false, 48_000e18, 3e18);
+        // The index follows the metric; align it so the liquidation runs
+        // inside the deviation band.
+        oracle.set(METRIC, amm.markPrice(MARKET), true);
 
         uint256 insuranceBefore = insurance.balance();
         vm.prank(liquidator);
@@ -401,6 +404,7 @@ contract WavvyHouseTest is Test {
 
         uint256 tokenId = _open(alice, true, 100e18, 3e18);
         _open(whale, false, 64_000e18, 3e18); // mark falls below 2/3 of entry
+        oracle.set(METRIC, amm.markPrice(MARKET), true);
 
         uint256 insuranceBefore = insurance.balance();
 
@@ -414,6 +418,8 @@ contract WavvyHouseTest is Test {
         assertGt(closedSize, 0);
         assertFalse(position.exists(tokenId));
         assertLt(insurance.balance(), insuranceBefore);
+        // The liquidator is paid even when the position blew through its margin.
+        assertGt(vault.balanceOf(liquidator), 0);
         _assertBacking();
     }
 
@@ -524,5 +530,131 @@ contract WavvyHouseTest is Test {
         curator.closeCall(callId);
         assertEq(vault.balanceOf(address(curator)), 0);
         assertEq(vault.balanceOf(curatorUser), 10_000e18);
+    }
+
+    function test_ShortReceivesFundingWhenMarkAboveIndex() public {
+        _fundTreasury(20_000e18);
+        _open(bob, true, 2000e18, 3e18); // pushes the mark above the index
+        uint256 shortId = _open(alice, false, 100e18, 3e18);
+
+        int256 growth0 = amm.fundingGrowth(MARKET);
+        uint256 mark0 = amm.markPrice(MARKET);
+        assertGt(mark0, INDEX_PRICE);
+
+        vm.roll(block.number + 100);
+
+        uint256 size = _sizeOf(shortId);
+        int256 rate = FundingLib.ratePerBlock(mark0, INDEX_PRICE, FUNDING_K, MAX_FUNDING_RATE);
+        int256 expectedCost = -FundingLib.payment(size, growth0 + rate * 100, growth0);
+        assertLt(expectedCost, 0); // a short receives when the mark is above the index
+
+        vm.expectEmit(true, false, false, true, address(house));
+        emit WavvyHouse.FundingSettled(shortId, expectedCost);
+
+        vm.prank(alice);
+        house.closePosition(shortId, size);
+    }
+
+    function test_PartialCloseKeepsFundingOnRemainder() public {
+        _fundTreasury(20_000e18);
+        uint256 tokenId = _open(alice, true, 100e18, 3e18);
+
+        int256 growth0 = amm.fundingGrowth(MARKET);
+        uint256 mark0 = amm.markPrice(MARKET);
+        vm.roll(block.number + 100);
+        int256 rate = FundingLib.ratePerBlock(mark0, INDEX_PRICE, FUNDING_K, MAX_FUNDING_RATE);
+        int256 growth1 = growth0 + rate * 100;
+
+        uint256 size = _sizeOf(tokenId);
+        uint256 tiny = size / 10_000;
+
+        vm.prank(alice);
+        house.closePosition(tokenId, tiny);
+
+        // The remainder still owes the full accumulated funding: closing it
+        // at the same block must charge the whole checkpoint delta.
+        uint256 remaining = size - tiny;
+        int256 expectedRemainingCost = FundingLib.payment(remaining, growth1, growth0);
+        assertGt(expectedRemainingCost, 0);
+
+        vm.expectEmit(true, false, false, true, address(house));
+        emit WavvyHouse.FundingSettled(tokenId, expectedRemainingCost);
+
+        vm.prank(alice);
+        house.closePosition(tokenId, remaining);
+    }
+
+    function test_ClosePositionWorksWhenIndexStale() public {
+        _fundTreasury(20_000e18);
+        uint256 tokenId = _open(alice, true, 100e18, 3e18);
+
+        oracle.set(METRIC, INDEX_PRICE, false);
+
+        uint256 size = _sizeOf(tokenId);
+        vm.prank(alice);
+        house.closePosition(tokenId, size);
+        assertFalse(position.exists(tokenId));
+    }
+
+    function test_CopyCallMustMatchMarketAndSide() public {
+        bytes32[] memory creators = new bytes32[](1);
+        creators[0] = CREATOR;
+        vm.startPrank(admin);
+        risk.setConfig(MARKET_INDEX, _config());
+        factory.createMarket(MARKET_INDEX, 0, METRIC, creators, INDEX_PRICE, DEPTH);
+        vm.stopPrank();
+
+        vm.prank(curatorUser);
+        uint256 callId = curator.createCall(MARKET, true, 100e18);
+
+        // Wrong side.
+        vm.prank(alice);
+        vm.expectRevert(WavvyHouse.InvalidCopyCall.selector);
+        house.openPosition(MARKET, false, 100e18, 3e18, callId);
+
+        // Wrong market.
+        vm.prank(alice);
+        vm.expectRevert(WavvyHouse.InvalidCopyCall.selector);
+        house.openPosition(MARKET_INDEX, true, 100e18, 3e18, callId);
+
+        // Closed call.
+        vm.prank(curatorUser);
+        curator.closeCall(callId);
+        vm.prank(alice);
+        vm.expectRevert(WavvyHouse.InvalidCopyCall.selector);
+        house.openPosition(MARKET, true, 100e18, 3e18, callId);
+    }
+
+    function test_LiquidationRevertsWhenMarkDeviatesBeyondBand() public {
+        _fundTreasury(20_000e18);
+        _fundInsurance(20_000e18);
+
+        uint256 tokenId = _open(alice, true, 100e18, 3e18);
+        _open(whale, false, 48_000e18, 3e18); // mark far below the index
+
+        vm.prank(liquidator);
+        vm.expectRevert(WavvyHouse.MarkDeviationTooHigh.selector);
+        house.liquidate(tokenId);
+    }
+
+    function test_LiquidationUsesWorseOfMarkAndIndex() public {
+        _fundTreasury(20_000e18);
+        _fundInsurance(20_000e18);
+
+        // The short is healthy at the mark but not against the index, which is
+        // the worse price for a short.
+        vm.prank(admin);
+        risk.setMaintenanceMarginBps(MARKET, 3330);
+
+        uint256 tokenId = _open(alice, false, 100e18, 3e18);
+        // Index sits just above the mark: the worse price for the short.
+        oracle.set(METRIC, 1004e18, true);
+
+        vm.prank(liquidator);
+        (uint256 payout, uint256 closedSize) = house.liquidate(tokenId);
+
+        assertGt(closedSize, 0);
+        assertGe(payout, 0);
+        _assertBacking();
     }
 }

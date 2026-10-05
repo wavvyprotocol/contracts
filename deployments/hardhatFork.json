@@ -1,0 +1,27 @@
+{
+  "network": "hardhatFork",
+  "chainId": 143,
+  "treasury": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+  "grantsPool": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+  "timelock": "0x499aa73a1d27e54b33e7db05ffd22854ec70257e",
+  "timelockDelay": 3600,
+  "timelockProposer": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+  "adminRenounced": true,
+  "riskSeeded": false,
+  "contracts": {
+    "MockUSDC": "0x3c2bafebbb0c8c58f39a976e725cd20d611d01e9",
+    "WavvyRiskManager": "0x5f246addcf057e0f778cd422e20e413be70f9a0c",
+    "WavvyOracle": "0xad82ecf79e232b0391c5479c7f632aa1ea701ed1",
+    "WavvyIndexOracle": "0x4dd5336f3c0d70893a7a86c6aebe9b953e87c891",
+    "WavvyVault": "0x91a1eee63f300b8f41ae6af67edea2e2ed8c3f79",
+    "WavvyAMM": "0xbe6eb4acb499f992ba2dac7cad59d56da9e0d823",
+    "WavvyHouse": "0x54287aab4d98ea51a3b1fbcee56daf27e04a56a6",
+    "WavvyPosition": "0xe401fbb0d6828e9f25481efdc9dd18da9e500983",
+    "WavvyInsurance": "0xb6aa91e8904d691a10372706e57ae1b390d26353",
+    "WavvyFactory": "0x6ffa22292b86d678ff6621eedc9b15e68dc44dcd",
+    "WavvyCreatorRewards": "0x11632f9766ee9d9317f95562a6bd529652ead78f",
+    "WavvyCurator": "0x4f1f87d512650f32bf9949c4c5ef37a3cc891c6d",
+    "WavvyTimelock": "0x499aa73a1d27e54b33e7db05ffd22854ec70257e"
+  },
+  "updatedAt": "2026-10-05T07:28:03.539Z"
+}

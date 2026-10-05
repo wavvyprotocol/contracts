@@ -4,7 +4,7 @@ pragma solidity 0.8.34;
 import { TimelockController } from "@openzeppelin/contracts/governance/TimelockController.sol";
 import { IWavvyTimelock } from "../interfaces/IWavvyTimelock.sol";
 
-/// @notice Protocol governance timelock. Every admin action in the system is scheduled and executed through this contract: risk parameter changes, market pauses, role grants, and contract upgrades.
+/// @notice Protocol governance timelock. Every admin action in the system is scheduled and executed through this contract: risk parameter changes, market pauses, and role grants.
 ///
 /// The delay is deploy configuration: short on testnet for iteration speed, 24 to 48 hours on mainnet so users can exit before a risky change lands.
 contract WavvyTimelock is TimelockController, IWavvyTimelock {

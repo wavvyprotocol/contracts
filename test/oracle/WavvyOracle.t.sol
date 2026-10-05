@@ -4,6 +4,7 @@ pragma solidity 0.8.34;
 import { Test } from "forge-std/Test.sol";
 import { WavvyOracle } from "../../contracts/oracle/WavvyOracle.sol";
 import { TWAPLib } from "../../contracts/lib/TWAPLib.sol";
+import { IReceiver } from "../../contracts/interfaces/IReceiver.sol";
 
 contract WavvyOracleTest is Test {
     WavvyOracle internal oracle;
@@ -212,5 +213,89 @@ contract WavvyOracleTest is Test {
         vm.expectRevert(WavvyOracle.InvalidConfig.selector);
         oracle.registerMetric(keccak256("bad"), HEARTBEAT, TWAP_WINDOW, MIN_WINDOW, 2000, 500);
         vm.stopPrank();
+    }
+
+    function test_ReceiverInterfaceAdvertised() public view {
+        assertTrue(oracle.supportsInterface(type(IReceiver).interfaceId));
+        assertTrue(oracle.supportsInterface(0x01ffc9a7)); // IERC165
+    }
+
+    function test_ForwarderAndWorkflowMetadataRules() public {
+        address forwarder = address(0xF0A2D);
+        bytes32 workflowId = keccak256("wavvy-youtube-workflow");
+        bytes10 workflowName = bytes10("wavvy-feed");
+        address workflowOwner = address(0x0B57E);
+
+        vm.startPrank(admin);
+        oracle.grantRole(oracle.CRE_REPORTER_ROLE(), forwarder);
+        oracle.setCreForwarder(forwarder);
+        oracle.setWorkflowRule(workflowId, workflowName, workflowOwner);
+        vm.stopPrank();
+
+        bytes memory validMetadata = abi.encodePacked(workflowId, workflowName, workflowOwner);
+        vm.prank(forwarder);
+        oracle.onReport(validMetadata, abi.encode(METRIC, 1000e18, START_TIME, okStatus));
+        assertEq(oracle.latestValue(METRIC), 1000e18);
+
+        // A different workflow id is rejected.
+        bytes memory wrongWorkflow = abi.encodePacked(keccak256("other-workflow"), workflowName, workflowOwner);
+        vm.prank(forwarder);
+        vm.expectRevert(WavvyOracle.WorkflowNotAllowed.selector);
+        oracle.onReport(wrongWorkflow, abi.encode(METRIC, 1000e18, START_TIME, okStatus));
+
+        // A different workflow owner is rejected.
+        bytes memory wrongOwner = abi.encodePacked(workflowId, workflowName, address(0xBAD));
+        vm.prank(forwarder);
+        vm.expectRevert(WavvyOracle.WorkflowNotAllowed.selector);
+        oracle.onReport(wrongOwner, abi.encode(METRIC, 1000e18, START_TIME, okStatus));
+
+        // Once pinned, another role holder cannot deliver directly.
+        vm.prank(creReporter);
+        vm.expectRevert(WavvyOracle.UnauthorizedForwarder.selector);
+        oracle.onReport(validMetadata, abi.encode(METRIC, 1000e18, START_TIME, okStatus));
+    }
+
+    function test_RebaseRecoversFromLegitimateJump() public {
+        _creReport(1000e18, START_TIME);
+        vm.warp(START_TIME + 60);
+
+        // A 50 percent move trips the breaker and keeps the old value.
+        _creReport(1500e18, START_TIME + 60);
+        assertTrue(oracle.isFrozen(METRIC));
+        assertEq(oracle.latestValue(METRIC), 1000e18);
+
+        vm.warp(START_TIME + 120);
+        _expectCreRevert(1500e18, START_TIME + 120, WavvyOracle.CircuitBreakerActive.selector);
+
+        // Inspection confirms the jump: rebase accepts it and reporting resumes.
+        vm.prank(admin);
+        oracle.rebaseMetric(METRIC, 1500e18, START_TIME + 120);
+        assertFalse(oracle.isFrozen(METRIC));
+        assertEq(oracle.latestValue(METRIC), 1500e18);
+
+        vm.warp(START_TIME + 180);
+        _creReport(1520e18, START_TIME + 180);
+        assertEq(oracle.latestValue(METRIC), 1520e18);
+    }
+
+    function test_AdminSuspensionIsSticky() public {
+        _creReport(1000e18, START_TIME);
+
+        vm.prank(admin);
+        oracle.setSuspended(METRIC, true);
+        assertTrue(oracle.isSuspended(METRIC));
+        assertFalse(oracle.isFresh(METRIC));
+
+        // A valid report does not clear an admin suspension.
+        vm.warp(START_TIME + 60);
+        _creReport(1000e18, START_TIME + 60);
+        assertTrue(oracle.isSuspended(METRIC));
+        assertFalse(oracle.isFresh(METRIC));
+
+        // Only the admin clears it.
+        vm.prank(admin);
+        oracle.setSuspended(METRIC, false);
+        assertFalse(oracle.isSuspended(METRIC));
+        assertTrue(oracle.isFresh(METRIC));
     }
 }

@@ -21,9 +21,8 @@ contract WavvyInsurance is AccessControl, IWavvyInsurance {
     uint256 public totalCovered;
 
     error ZeroAmount();
-    error HouseOnly();
 
-    event Funded(address indexed from, uint256 amount);
+    event Funded(address indexed from, uint256 amountWad);
     event Covered(address indexed to, uint256 amount);
     event Withdrawn(address indexed to, uint256 amount);
 
@@ -32,17 +31,19 @@ contract WavvyInsurance is AccessControl, IWavvyInsurance {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
     }
 
-    /// @notice Deposit into the fund. Pulls tokens from the caller and credits this contract's vault account.
-    function fund(uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (amount == 0) revert ZeroAmount();
+    /// @notice Deposit into the fund. `amountWad` is 18-decimal wad, the matching token amount is pulled from the caller and credited to this contract's vault account.
+    function fund(uint256 amountWad) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (amountWad == 0) revert ZeroAmount();
         IERC20 token = vault.token();
-        token.safeTransferFrom(msg.sender, address(this), amount);
-        token.forceApprove(address(vault), amount);
-        vault.deposit(amount);
-        emit Funded(msg.sender, amount);
+        uint256 tokenAmount = WavvyMath.fromWad(amountWad, vault.tokenDecimals());
+        if (tokenAmount == 0) revert ZeroAmount();
+        token.safeTransferFrom(msg.sender, address(this), tokenAmount);
+        token.forceApprove(address(vault), tokenAmount);
+        vault.deposit(tokenAmount);
+        emit Funded(msg.sender, amountWad);
     }
 
-    /// @notice Move up to `amount` from the fund to the caller. House only, because the caller is the trading system settling a shortfall.
+    /// @notice Move up to `amount` wad from the fund to the caller. House only, because the caller is the trading system settling a shortfall.
     function coverBadDebt(uint256 amount) external override onlyRole(HOUSE_ROLE) returns (uint256 covered) {
         uint256 fundBalance = vault.balanceOf(address(this));
         covered = WavvyMath.min(amount, fundBalance);
@@ -53,7 +54,7 @@ contract WavvyInsurance is AccessControl, IWavvyInsurance {
         }
     }
 
-    /// @notice Withdraw part of the fund back to the treasury account. Admin only, used when the fund exceeds its coverage target.
+    /// @notice Withdraw `amount` wad of the fund to `to`. Admin only, used when the fund exceeds its coverage target.
     function withdraw(address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (amount == 0) revert ZeroAmount();
         vault.transfer(address(this), to, amount);

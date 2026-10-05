@@ -21,21 +21,6 @@ contract TWAPHarness {
         return state.cumulativeAt(target);
     }
 
-    function oldestTimestamp() external view returns (uint64) {
-        return state.oldestTimestamp();
-    }
-
-    function latestValue() external view returns (uint256) {
-        return state.latestValue();
-    }
-
-    function latestTimestamp() external view returns (uint64) {
-        return state.latestTimestamp();
-    }
-
-    function observationCount() external view returns (uint256) {
-        return state.observationCount();
-    }
 }
 
 /// @notice Hand-computed known answers for the observation ring buffer and
@@ -50,10 +35,9 @@ contract TWAPLibTest is Test {
     function test_FirstWriteStartsSeries() public {
         harness.write(100e18, 1000, 16);
 
-        assertEq(harness.observationCount(), 1);
-        assertEq(harness.latestValue(), 100e18);
-        assertEq(harness.latestTimestamp(), 1000);
-        assertEq(harness.oldestTimestamp(), 1000);
+        // History exactly matches the minimum window.
+        assertEq(harness.twap(100, 100, 1100), 100e18);
+        assertEq(harness.cumulativeAt(1000), 0);
     }
 
     function test_SingleValueAveragesOverAvailableSpan() public {
@@ -106,11 +90,11 @@ contract TWAPLibTest is Test {
         harness.write(30e18, 1200, 3);
         harness.write(40e18, 1300, 3);
 
-        assertEq(harness.observationCount(), 3);
-        assertEq(harness.oldestTimestamp(), 1100);
-
         // History from 1100 to 1400: 20 for 100s, 30 for 100s, 40 for 100s.
         assertEq(harness.twap(1000, 100, 1400), 30e18);
+
+        // Anything before the oldest surviving observation clamps to it.
+        assertEq(harness.cumulativeAt(1000), 1000e18);
     }
 
     function test_MinimumHistoryGuard() public {
@@ -124,7 +108,7 @@ contract TWAPLibTest is Test {
         harness.twap(1000, 100, 1050);
 
         vm.expectRevert(TWAPLib.NoObservations.selector);
-        harness.oldestTimestamp();
+        harness.cumulativeAt(1000);
     }
 
     function test_TimestampsMustIncrease() public {

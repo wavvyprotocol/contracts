@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 
 import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
+import { IERC165 } from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import { IReceiver } from "../interfaces/IReceiver.sol";
 import { IWavvyOracle } from "../interfaces/IWavvyOracle.sol";
 import { TWAPLib } from "../lib/TWAPLib.sol";
@@ -38,12 +39,23 @@ contract WavvyOracle is AccessControl, IWavvyOracle, IReceiver {
         uint256 lastValue;
         bool registered;
         bool suspended;
+        bool adminSuspended;
         bool frozen;
     }
 
     mapping(bytes32 => Metric) private _metrics;
 
+    /// @notice Forwarder address allowed to deliver reports. Zero accepts any
+    /// holder of the reporter role.
+    address public creForwarder;
+    bytes32 public expectedWorkflowId;
+    bytes10 public expectedWorkflowName;
+    address public expectedWorkflowOwner;
+
     error UnauthorizedReporter();
+    error UnauthorizedForwarder();
+    error WorkflowNotAllowed();
+    error InvalidMetadata();
     error UnknownMetric();
     error ZeroMetric();
     error StaleOracle();
@@ -74,6 +86,9 @@ contract WavvyOracle is AccessControl, IWavvyOracle, IReceiver {
     event MetricUpdated(
         bytes32 indexed metricId, uint256 value, uint64 observedAt, uint8 status, address indexed reporter
     );
+    event ForwarderUpdated(address indexed forwarder);
+    event WorkflowRuleUpdated(bytes32 workflowId, bytes10 workflowName, address workflowOwner);
+    event MetricRebased(bytes32 indexed metricId, uint256 value, uint64 observedAt);
     event MetricSuspended(bytes32 indexed metricId, uint8 status);
     event MetricResumed(bytes32 indexed metricId);
     event CircuitBroken(bytes32 indexed metricId, uint256 value, uint256 lastValue);
@@ -125,11 +140,13 @@ contract WavvyOracle is AccessControl, IWavvyOracle, IReceiver {
     }
 
     /// @notice Freeze or unfreeze a metric after the platform status changes.
+    /// An admin suspension is sticky: only the admin can clear it, while
+    /// reporter-driven suspensions clear on the next valid report.
     function setSuspended(bytes32 metricId, bool suspended) external onlyRole(DEFAULT_ADMIN_ROLE) {
         Metric storage m = _metrics[metricId];
         if (!m.registered) revert UnknownMetric();
-        if (m.suspended == suspended) return;
-        m.suspended = suspended;
+        if (m.adminSuspended == suspended) return;
+        m.adminSuspended = suspended;
         if (suspended) {
             emit MetricSuspended(metricId, STATUS_SUSPENDED);
         } else {
@@ -137,7 +154,9 @@ contract WavvyOracle is AccessControl, IWavvyOracle, IReceiver {
         }
     }
 
-    /// @notice Clear the circuit breaker after inspection so updates flow again.
+    /// @notice Clear the circuit breaker after inspection so updates flow
+    /// again. Use `rebaseMetric` instead when the move was legitimate and the
+    /// deviation reference must move with it.
     function resetCircuitBreaker(bytes32 metricId) external onlyRole(DEFAULT_ADMIN_ROLE) {
         Metric storage m = _metrics[metricId];
         if (!m.registered) revert UnknownMetric();
@@ -145,13 +164,70 @@ contract WavvyOracle is AccessControl, IWavvyOracle, IReceiver {
         emit CircuitReset(metricId);
     }
 
-    /// @notice CRE receiver entrypoint. Only the CRE reporter role, held by
-    /// the forwarder, may deliver reports.
-    function onReport(bytes calldata, bytes calldata report) external override {
+    /// @notice Accept an inspected value after a legitimate jump, rebasing the
+    /// deviation reference and clearing the circuit breaker so reporting
+    /// resumes. The value is recorded as a normal observation.
+    function rebaseMetric(bytes32 metricId, uint256 value, uint64 observedAt) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        Metric storage m = _metrics[metricId];
+        if (!m.registered) revert UnknownMetric();
+        if (value == 0) revert ZeroMetric();
+        if (observedAt > block.timestamp) revert FutureTimestamp();
+        if (observedAt <= m.lastUpdateAt) revert StaleOracle();
+        TWAPLib.write(m.observations, value, observedAt, MAX_OBSERVATIONS);
+        m.lastValue = value;
+        m.lastUpdateAt = observedAt;
+        m.frozen = false;
+        emit MetricRebased(metricId, value, observedAt);
+        emit CircuitReset(metricId);
+    }
+
+    /// @notice Pin the CRE forwarder, the only address that may deliver
+    /// reports once set. Zero accepts any reporter-role holder.
+    function setCreForwarder(address forwarder) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        creForwarder = forwarder;
+        emit ForwarderUpdated(forwarder);
+    }
+
+    /// @notice Restrict reports to one workflow. A zero field skips that
+    /// check, so an unconfigured deployment accepts any reporter.
+    function setWorkflowRule(bytes32 workflowId, bytes10 workflowName, address workflowOwner)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        expectedWorkflowId = workflowId;
+        expectedWorkflowName = workflowName;
+        expectedWorkflowOwner = workflowOwner;
+        emit WorkflowRuleUpdated(workflowId, workflowName, workflowOwner);
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view override(AccessControl, IERC165) returns (bool) {
+        return interfaceId == type(IReceiver).interfaceId || super.supportsInterface(interfaceId);
+    }
+
+    /// @notice CRE receiver entrypoint. Only the CRE reporter role, and the
+    /// pinned forwarder once configured, may deliver reports. Metadata must
+    /// match the configured workflow rule when one is set.
+    function onReport(bytes calldata metadata, bytes calldata report) external override {
         if (!hasRole(CRE_REPORTER_ROLE, msg.sender)) revert UnauthorizedReporter();
+        if (creForwarder != address(0) && msg.sender != creForwarder) revert UnauthorizedForwarder();
+        _validateWorkflow(metadata);
         (bytes32 metricId, uint256 value, uint64 observedAt, uint8 status) =
             abi.decode(report, (bytes32, uint256, uint64, uint8));
         _post(metricId, value, observedAt, status, false);
+    }
+
+    /// @dev CRE metadata is packed as workflowId, workflowName, workflowOwner.
+    function _validateWorkflow(bytes calldata metadata) internal view {
+        if (expectedWorkflowId == bytes32(0) && expectedWorkflowName == bytes10(0) && expectedWorkflowOwner == address(0)) {
+            return;
+        }
+        if (metadata.length < 62) revert InvalidMetadata();
+        bytes32 workflowId = bytes32(metadata[0:32]);
+        bytes10 workflowName = bytes10(metadata[32:42]);
+        address workflowOwner = address(bytes20(metadata[42:62]));
+        if (expectedWorkflowId != bytes32(0) && workflowId != expectedWorkflowId) revert WorkflowNotAllowed();
+        if (expectedWorkflowName != bytes10(0) && workflowName != expectedWorkflowName) revert WorkflowNotAllowed();
+        if (expectedWorkflowOwner != address(0) && workflowOwner != expectedWorkflowOwner) revert WorkflowNotAllowed();
     }
 
     /// @notice Fallback keeper entrypoint. Allowed only while the metric is
@@ -186,7 +262,8 @@ contract WavvyOracle is AccessControl, IWavvyOracle, IReceiver {
     }
 
     function isSuspended(bytes32 metricId) external view override returns (bool) {
-        return _metrics[metricId].suspended;
+        Metric storage m = _metrics[metricId];
+        return m.suspended || m.adminSuspended;
     }
 
     function isFrozen(bytes32 metricId) external view override returns (bool) {
@@ -245,8 +322,8 @@ contract WavvyOracle is AccessControl, IWavvyOracle, IReceiver {
         m.lastValue = value;
         m.lastUpdateAt = observedAt;
         if (m.suspended) {
-            // Fresh valid data clears a reporter-driven suspension. Index
-            // rebalances handle the fresh baseline separately.
+            // Fresh valid data clears a reporter-driven suspension only. An
+            // admin suspension stays until the admin clears it.
             m.suspended = false;
             emit MetricResumed(metricId);
         }
@@ -254,7 +331,7 @@ contract WavvyOracle is AccessControl, IWavvyOracle, IReceiver {
     }
 
     function _isFresh(Metric storage m) internal view returns (bool) {
-        if (!m.registered || m.frozen || m.suspended) return false;
+        if (!m.registered || m.frozen || m.suspended || m.adminSuspended) return false;
         if (m.lastUpdateAt == 0) return false;
         return block.timestamp - m.lastUpdateAt <= m.heartbeat;
     }

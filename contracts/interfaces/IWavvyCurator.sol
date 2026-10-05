@@ -14,4 +14,10 @@ interface IWavvyCurator {
 
     /// @notice Curator who owns a call.
     function callCurator(uint256 callId) external view returns (address);
+
+    /// @notice Full call record used to validate copy attribution.
+    function callInfo(uint256 callId)
+        external
+        view
+        returns (address curator, uint256 marketId, bool isLong, uint256 stake, uint64 createdAt, bool active);
 }

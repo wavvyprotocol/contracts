@@ -90,19 +90,14 @@ contract WavvyMathTest is Test {
     }
 
     function test_SignedConversions() public pure {
-        assertEq(WavvyMath.toSigned(5), int256(5));
         assertEq(WavvyMath.toUnsigned(5), 5);
         assertEq(WavvyMath.absSigned(-7), 7);
         assertEq(WavvyMath.absSigned(7), 7);
-        assertTrue(WavvyMath.isNegative(-1));
-        assertFalse(WavvyMath.isNegative(0));
-        assertTrue(WavvyMath.isZeroSigned(0));
-        assertFalse(WavvyMath.isZeroSigned(1));
         assertEq(WavvyMath.signed(9e18), int256(9e18));
     }
 
     function test_ToUnsignedRejectsNegative() public {
-        vm.expectRevert(WavvyMath.DivByZero.selector);
+        vm.expectRevert(WavvyMath.NegativeValue.selector);
         this.toUnsignedExternal(-1);
     }
 
@@ -125,9 +120,6 @@ contract WavvyMathTest is Test {
         assertEq(WavvyMath.divSigned(6e18, 3e18), 2e18);
         assertEq(WavvyMath.divSigned(-6e18, 3e18), -2e18);
         assertEq(WavvyMath.divSigned(1e18, 3e18), 333333333333333333);
-
-        assertEq(WavvyMath.mulDivSigned(2e18, 3e18, 6e18), 1e18);
-        assertEq(WavvyMath.mulDivSigned(-2e18, 3e18, 6e18), -1e18);
     }
 
     function test_SignedCountHelpers() public pure {

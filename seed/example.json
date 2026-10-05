@@ -1,0 +1,35 @@
+{
+  "metrics": [
+    {
+      "metricId": "0x50c5596788b7d387860a7b10050422e38929b7b577efe69851187c8a0b77708a",
+      "heartbeat": 3600,
+      "twapWindow": 7200,
+      "minTwapWindow": 1800,
+      "maxDeviationBps": 500,
+      "circuitBreakerBps": 2000
+    }
+  ],
+  "configureMarkets": [
+    { "marketId": 1, "marketType": 0 }
+  ],
+  "markets": [
+    {
+      "marketId": 1,
+      "marketType": 0,
+      "metricId": "0x50c5596788b7d387860a7b10050422e38929b7b577efe69851187c8a0b77708a",
+      "creatorIds": ["0xfea8cebbd89120706cffddab9f905c2601f5cb21d35b0d078ebf38649a973695"],
+      "initialPrice": "1000000000000000000000",
+      "virtualDepth": "1000000000000000000000"
+    }
+  ],
+  "indexMarkets": [
+    {
+      "marketId": 2,
+      "metricIds": [
+        "0x50c5596788b7d387860a7b10050422e38929b7b577efe69851187c8a0b77708a",
+        "0x9beea80649449d969e437f764a861b8ef6a9b2d72dcc2b7c0be2015aa64e26a7"
+      ],
+      "baselines": ["1000000000000000000000000", "250000000000000000000000"]
+    }
+  ]
+}

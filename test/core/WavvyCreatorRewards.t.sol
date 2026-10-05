@@ -137,4 +137,29 @@ contract WavvyCreatorRewardsTest is Test {
         vm.expectRevert(WavvyCreatorRewards.NothingToSweep.selector);
         rewards.sweep(CREATOR);
     }
+
+    function test_CancelPendingWalletChange() public {
+        vm.startPrank(admin);
+        rewards.linkWallet(CREATOR, creatorWallet);
+        rewards.requestWalletChange(CREATOR, newWallet);
+        rewards.cancelWalletChange(CREATOR);
+        vm.stopPrank();
+
+        (address wallet, address pending,,) = rewards.creatorInfo(CREATOR);
+        assertEq(wallet, creatorWallet);
+        assertEq(pending, address(0));
+
+        vm.expectRevert(WavvyCreatorRewards.NoPendingWallet.selector);
+        rewards.finalizeWalletChange(CREATOR);
+    }
+
+    function test_SettingZeroDurationsRejected() public {
+        vm.startPrank(admin);
+        vm.expectRevert(WavvyCreatorRewards.InvalidParams.selector);
+        rewards.setClaimWindow(0);
+
+        vm.expectRevert(WavvyCreatorRewards.InvalidParams.selector);
+        rewards.setWalletChangeDelay(0);
+        vm.stopPrank();
+    }
 }

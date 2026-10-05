@@ -16,7 +16,7 @@ import { IWavvyIndexOracle } from "../interfaces/IWavvyIndexOracle.sol";
 import { IWavvyInsurance } from "../interfaces/IWavvyInsurance.sol";
 import { IWavvyOracle } from "../interfaces/IWavvyOracle.sol";
 import { IWavvyVault } from "../interfaces/IWavvyVault.sol";
-import { BPS_DENOMINATOR, LIQUIDATION_TARGET_BUFFER, WAD } from "../utils/Constants.sol";
+import { LIQUIDATION_TARGET_BUFFER, WAD } from "../utils/Constants.sol";
 
 /// @notice Composes the vault, the vAMM, the position ledger, the creator
 /// escrow, and the curator registry into open, close, and liquidation flows.
@@ -27,7 +27,7 @@ import { BPS_DENOMINATOR, LIQUIDATION_TARGET_BUFFER, WAD } from "../utils/Consta
 /// claim on its opener address after opening.
 ///
 /// PnL settles against the treasury account with the insurance fund as the
-/// backstop; the vault moves value between internal accounts only.
+/// backstop, the vault moves value between internal accounts only.
 contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
     bytes32 public constant MARKET_ADMIN_ROLE = keccak256("MARKET_ADMIN_ROLE");
 
@@ -69,6 +69,7 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
     error PartialCloseNotViable();
     error ProtocolBufferExhausted();
     error InvalidPriceSource();
+    error InvalidCopyCall();
     error SettlementMismatch();
     error SystemNotWired();
     error ZeroAmount();
@@ -98,7 +99,8 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         address indexed holder,
         uint256 closedSize,
         uint256 penalty,
-        uint256 payout
+        uint256 payout,
+        uint256 liquidatorPaid
     );
     event FundingSettled(uint256 indexed tokenId, int256 fundingCost);
     event BadDebt(uint256 indexed tokenId, uint256 deficit, uint256 covered);
@@ -183,6 +185,15 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
             revert MarkDeviationTooHigh();
         }
 
+        // A copy must mirror the call: same market and side, and the call must
+        // still be open. Otherwise copy fees would leak to unrelated curators.
+        if (callId != 0) {
+            (address callCurator, uint256 callMarketId, bool callIsLong,,, bool callActive) = curator.callInfo(callId);
+            if (callCurator == address(0) || !callActive || callMarketId != marketId || callIsLong != isLong) {
+                revert InvalidCopyCall();
+            }
+        }
+
         uint256 notionalWanted = WavvyMath.mulWad(margin, leverage);
         uint256 size = WavvyMath.mulDivFloor(notionalWanted, WAD, mark);
         if (size == 0) revert InsufficientMargin();
@@ -234,18 +245,19 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         IPosition.PositionData memory p = position.getPosition(tokenId);
         if (closeSize == 0 || closeSize > p.size) revert InvalidCloseSize();
 
-        uint256 indexPrice = _indexPrice(p.marketId);
-        int256 growth = amm.accrueFunding(p.marketId, indexPrice);
-        CloseResult memory r = _executeClose(p, closeSize, growth, indexPrice, risk.tradingFeeBps(p.marketId), 0);
+        (uint256 effectiveIndex, int256 growth) = _closeContext(p.marketId);
+        CloseResult memory r = _executeClose(p, closeSize, growth, effectiveIndex, risk.tradingFeeBps(p.marketId), 0);
         uint256 copyFee = _copyFeeFor(p, r.pnl, r.fundingCost);
 
         if (closeSize == p.size) {
             position.updatePosition(tokenId, 0, 0, growth);
-            payout = _settle(tokenId, holder, p.marketId, r.marginOut, r.pnl, r.fundingCost, r.fee + copyFee, 0, address(0), true);
+            (payout,) = _settle(tokenId, holder, p.marketId, r.marginOut, r.pnl, r.fundingCost, r.fee + copyFee, 0, address(0), true);
             position.burnPosition(tokenId);
         } else {
-            position.updatePosition(tokenId, p.size - closeSize, p.margin - r.marginOut, growth);
-            payout = _settle(tokenId, holder, p.marketId, r.marginOut, r.pnl, r.fundingCost, r.fee + copyFee, 0, address(0), false);
+            // Keep the old funding checkpoint: the remaining size still owes
+            // the funding accrued up to this close.
+            position.updatePosition(tokenId, p.size - closeSize, p.margin - r.marginOut, p.lastFundingGrowth);
+            (payout,) = _settle(tokenId, holder, p.marketId, r.marginOut, r.pnl, r.fundingCost, r.fee + copyFee, 0, address(0), false);
         }
 
         if (copyFee > 0) _distributeCopyFee(p.callId, p.marketId, copyFee);
@@ -254,6 +266,13 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         emit PositionClosed(tokenId, holder, closeSize, r.exitPrice, payout, r.fee + copyFee);
     }
 
+    /// Liquidation equity is measured against the price that is worse for the
+    /// position (the lower of mark and index for longs, the higher for
+    /// shorts), so a mark pushed away from the index cannot hide bad debt. The
+    /// post-trade mark-versus-index deviation is checked afterwards: a
+    /// liquidation whose execution leaves the mark beyond the deviation band
+    /// reverts, which blocks liquidations triggered by an extreme move.
+    ///
     /// @inheritdoc IWavvyHouse
     function liquidate(uint256 tokenId) external nonReentrant returns (uint256 payout, uint256 closedSize) {
         _requireWired();
@@ -261,18 +280,19 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         address holder = position.ownerOf(tokenId);
         IPosition.PositionData memory p = position.getPosition(tokenId);
 
-        (uint256 effectiveIndex, int256 growth, uint256 mark) = _liquidationContext(p.marketId);
-        if (!_isLiquidatable(p, growth, mark)) revert LiquidationNotAllowed();
+        LiquidationContext memory ctx = _liquidationContext(p.marketId, p.isLong);
+        if (!_isLiquidatable(p, ctx.growth, ctx.mark, ctx.equityPrice)) revert LiquidationNotAllowed();
 
-        int256 equity = _equity(p, growth, mark);
-        uint256 target = equity > 0 ? _targetSize(p, uint256(equity), mark) : 0;
+        int256 equity = _equity(p, ctx.growth, ctx.equityPrice);
+        uint256 target = equity > 0 ? _targetSize(p, uint256(equity), ctx.mark) : 0;
         if (target == 0 || target >= p.size) {
-            return _fullLiquidate(tokenId, holder, p, growth, effectiveIndex);
+            (uint256 fullPayout, uint256 fullClosed,) = _fullLiquidate(tokenId, holder, p, ctx);
+            return (fullPayout, fullClosed);
         }
 
         closedSize = p.size - target;
         CloseResult memory r =
-            _executeClose(p, closedSize, growth, effectiveIndex, 0, risk.liquidationPenaltyBps(p.marketId));
+            _executeClose(p, closedSize, ctx.growth, ctx.effectiveIndex, 0, risk.liquidationPenaltyBps(p.marketId));
 
         // The closed slice realizes its loss against margin instead of paying
         // the holder: equity stays in the position while notional shrinks,
@@ -284,18 +304,21 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         if (marginAfterSigned < 0) revert PartialCloseNotViable();
         uint256 marginAfter = uint256(marginAfterSigned);
 
-        position.updatePosition(tokenId, target, marginAfter, growth);
-        _settleSlice(p.marketId, p.margin, marginAfter, r.pnl, r.fundingCost, r.penalty);
+        // Keep the old funding checkpoint on the remainder.
+        position.updatePosition(tokenId, target, marginAfter, p.lastFundingGrowth);
+        uint256 liquidatorPaid = _settleSlice(p.marketId, p.margin, marginAfter, r.pnl, r.fundingCost, r.penalty);
         payout = 0;
 
+        _requireBoundedDeviation(p.marketId, ctx.effectiveIndex, ctx.indexValid);
+
         emit FundingSettled(tokenId, r.fundingCost);
-        emit Liquidated(tokenId, msg.sender, holder, closedSize, r.penalty, payout);
+        emit Liquidated(tokenId, msg.sender, holder, closedSize, r.penalty, payout, liquidatorPaid);
 
         // Escalate when the reduced position is still unhealthy.
         IPosition.PositionData memory afterData = position.getPosition(tokenId);
-        if (_isLiquidatable(afterData, growth, amm.markPrice(p.marketId))) {
-            (uint256 payoutRest, uint256 closedRest) =
-                _fullLiquidate(tokenId, holder, afterData, growth, effectiveIndex);
+        LiquidationContext memory afterCtx = _liquidationContext(p.marketId, p.isLong);
+        if (_isLiquidatable(afterData, afterCtx.growth, afterCtx.mark, afterCtx.equityPrice)) {
+            (uint256 payoutRest, uint256 closedRest,) = _fullLiquidate(tokenId, holder, afterData, afterCtx);
             payout += payoutRest;
             closedSize += closedRest;
         }
@@ -321,7 +344,10 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         uint256 feeBps,
         uint256 penaltyBps
     ) internal returns (CloseResult memory r) {
-        r.fundingCost = FundingLib.payment(closedSize, growth, p.lastFundingGrowth);
+        // FundingLib.payment returns the long-side cost: positive growth means
+        // longs pay. Shorts take the opposite sign.
+        int256 fundingPayment = FundingLib.payment(closedSize, growth, p.lastFundingGrowth);
+        r.fundingCost = p.isLong ? fundingPayment : WavvyMath.subSigned(0, fundingPayment);
         r.exitPrice = amm.closeTrade(p.marketId, p.isLong, closedSize, indexPrice);
         r.pnl = _pnl(p.isLong, closedSize, p.entryPrice, r.exitPrice);
         uint256 notional = WavvyMath.mulWad(closedSize, r.exitPrice);
@@ -334,36 +360,75 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         uint256 tokenId,
         address holder,
         IPosition.PositionData memory p,
-        int256 growth,
-        uint256 indexPrice
-    ) internal returns (uint256 payout, uint256 closedSize) {
+        LiquidationContext memory ctx
+    ) internal returns (uint256 payout, uint256 closedSize, uint256 liquidatorPaid) {
         closedSize = p.size;
         CloseResult memory r =
-            _executeClose(p, closedSize, growth, indexPrice, 0, risk.liquidationPenaltyBps(p.marketId));
+            _executeClose(p, closedSize, ctx.growth, ctx.effectiveIndex, 0, risk.liquidationPenaltyBps(p.marketId));
 
-        position.updatePosition(tokenId, 0, 0, growth);
-        payout = _settle(tokenId, holder, p.marketId, p.margin, r.pnl, r.fundingCost, 0, r.penalty, msg.sender, true);
+        position.updatePosition(tokenId, 0, 0, ctx.growth);
+        (payout, liquidatorPaid) =
+            _settle(tokenId, holder, p.marketId, p.margin, r.pnl, r.fundingCost, 0, r.penalty, msg.sender, true);
         position.burnPosition(tokenId);
 
+        _requireBoundedDeviation(p.marketId, ctx.effectiveIndex, ctx.indexValid);
+
         emit FundingSettled(tokenId, r.fundingCost);
-        emit Liquidated(tokenId, msg.sender, holder, closedSize, r.penalty, payout);
+        emit Liquidated(tokenId, msg.sender, holder, closedSize, r.penalty, payout, liquidatorPaid);
     }
 
-    /// @dev Funding checkpoint, effective index price, and mark for a
-    /// liquidation. A stale or missing index falls back to the mark price so
+    /// @dev Funding checkpoint and index price for closes. A stale or missing
+    /// index freezes funding and falls back to the mark, so a position can
+    /// always be wound down even while the oracle is out.
+    function _closeContext(uint256 marketId) internal returns (uint256 effectiveIndex, int256 growth) {
+        (uint256 indexPrice, bool indexValid) = _indexPriceSafe(marketId);
+        if (indexValid) {
+            return (indexPrice, amm.accrueFunding(marketId, indexPrice));
+        }
+        return (amm.markPrice(marketId), amm.fundingGrowth(marketId));
+    }
+
+    struct LiquidationContext {
+        uint256 effectiveIndex;
+        int256 growth;
+        uint256 mark;
+        uint256 equityPrice;
+        bool indexValid;
+    }
+
+    /// @dev Funding checkpoint, mark, and the price used for liquidation
+    /// equity. A stale or missing index falls back to the mark price so
     /// positions can still be wound down.
-    function _liquidationContext(uint256 marketId)
+    function _liquidationContext(uint256 marketId, bool isLong)
         internal
-        returns (uint256 effectiveIndex, int256 growth, uint256 mark)
+        returns (LiquidationContext memory ctx)
     {
         (uint256 indexPrice, bool indexValid) = _indexPriceSafe(marketId);
-        mark = amm.markPrice(marketId);
+        ctx.mark = amm.markPrice(marketId);
+        ctx.indexValid = indexValid;
         if (indexValid) {
-            effectiveIndex = indexPrice;
-            growth = amm.accrueFunding(marketId, indexPrice);
+            ctx.effectiveIndex = indexPrice;
+            ctx.growth = amm.accrueFunding(marketId, indexPrice);
         } else {
-            effectiveIndex = mark;
-            growth = amm.fundingGrowth(marketId);
+            ctx.effectiveIndex = ctx.mark;
+            ctx.growth = amm.fundingGrowth(marketId);
+        }
+        ctx.equityPrice = ctx.mark;
+        if (indexValid) {
+            ctx.equityPrice = isLong
+                ? WavvyMath.min(ctx.mark, indexPrice)
+                : WavvyMath.max(ctx.mark, indexPrice);
+        }
+    }
+
+    /// @dev Reverts the liquidation when executing it left the mark beyond the
+    /// configured deviation band. The revert rolls the whole liquidation back,
+    /// so a manipulated mark cannot force a liquidation through.
+    function _requireBoundedDeviation(uint256 marketId, uint256 indexPrice, bool indexValid) internal view {
+        if (!indexValid) return;
+        uint256 mark = amm.markPrice(marketId);
+        if (WavvyMath.deviationBps(mark, indexPrice) > risk.markDeviationPauseBps(marketId)) {
+            revert MarkDeviationTooHigh();
         }
     }
 
@@ -434,7 +499,7 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         int256 pnl,
         int256 fundingCost,
         uint256 penalty
-    ) internal {
+    ) internal returns (uint256 liquidatorPaid) {
         int256 net = WavvyMath.subSigned(pnl, fundingCost);
         if (net < 0) {
             vault.transfer(address(position), treasury, WavvyMath.absSigned(net));
@@ -444,7 +509,7 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         }
         if (penalty > 0) {
             vault.transfer(address(position), treasury, penalty);
-            _payLiquidationShares(marketId, msg.sender, penalty);
+            liquidatorPaid = _payLiquidationShares(marketId, msg.sender, penalty);
         }
         uint256 expected = uint256(
             WavvyMath.subSigned(WavvyMath.addSigned(WavvyMath.signed(marginBefore), net), WavvyMath.signed(penalty))
@@ -452,16 +517,43 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         if (expected != marginAfter) revert SettlementMismatch();
     }
 
-    function _payLiquidationShares(uint256 marketId, address liquidator, uint256 penalty) internal {
-        uint256 loot = WavvyMath.mulBps(penalty, risk.liquidatorShareBps(marketId));
+    function _payLiquidationShares(uint256 marketId, address liquidator, uint256 penalty)
+        internal
+        returns (uint256 loot)
+    {
+        loot = WavvyMath.mulBps(penalty, risk.liquidatorShareBps(marketId));
         uint256 insuranceShare = penalty - loot;
         if (loot > 0) vault.transfer(treasury, liquidator, loot);
         if (insuranceShare > 0) vault.transfer(treasury, address(insurance), insuranceShare);
     }
 
+    /// @dev Pays the liquidator on the bad-debt path. The insurance fund is
+    /// the first source, the treasury the second, so the account that spent
+    /// gas still receives a share when a position blows through its margin.
+    function _payBadDebtLiquidator(uint256 marketId, uint256 penalty, address liquidator)
+        internal
+        returns (uint256 paid)
+    {
+        if (penalty == 0 || liquidator == address(0)) return 0;
+        uint256 loot = WavvyMath.mulBps(penalty, risk.liquidatorShareBps(marketId));
+        if (loot == 0) return 0;
+        paid = insurance.coverBadDebt(loot);
+        uint256 shortfall = loot - paid;
+        if (shortfall > 0) {
+            uint256 fromTreasury = WavvyMath.min(shortfall, vault.balanceOf(treasury));
+            if (fromTreasury > 0) {
+                vault.transfer(treasury, address(this), fromTreasury);
+                paid += fromTreasury;
+            }
+        }
+        if (paid > 0) vault.transfer(address(this), liquidator, paid);
+    }
+
     /// @dev Moves margin, PnL, funding, fees, and penalties between the
     /// position account, the holder, the treasury, the liquidator, and the
-    /// insurance fund. Returns the payout sent to the holder.
+    /// insurance fund. Returns the payout sent to the holder and the amount
+    /// paid to the liquidator. Zero-value internal transfers are skipped so a
+    /// break-even close cannot revert on a zero transfer.
     function _settle(
         uint256 tokenId,
         address holder,
@@ -473,36 +565,36 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         uint256 penalty,
         address liquidator,
         bool allowBadDebt
-    ) internal returns (uint256 payout) {
+    ) internal returns (uint256 payout, uint256 liquidatorPaid) {
         int256 net =
             WavvyMath.subSigned(WavvyMath.subSigned(pnl, fundingCost), WavvyMath.signed(fee + penalty));
         int256 payoutSigned = WavvyMath.addSigned(WavvyMath.signed(marginIn), net);
 
         if (payoutSigned < 0) {
             if (!allowBadDebt) revert PartialCloseNotViable();
-            vault.transfer(address(position), treasury, marginIn);
+            if (marginIn > 0) vault.transfer(address(position), treasury, marginIn);
             uint256 deficit = WavvyMath.absSigned(payoutSigned);
             uint256 covered = insurance.coverBadDebt(deficit);
             if (covered > 0) vault.transfer(address(this), treasury, covered);
+            liquidatorPaid = _payBadDebtLiquidator(marketId, penalty, liquidator);
             emit BadDebt(tokenId, deficit, covered);
-            return 0;
+            return (0, liquidatorPaid);
         }
 
         uint256 payoutOut = uint256(payoutSigned);
         if (net > 0) {
             _ensureTreasury(uint256(net) + penalty);
             vault.transfer(treasury, address(position), uint256(net));
-        } else {
-            uint256 loss = WavvyMath.absSigned(net);
-            vault.transfer(address(position), treasury, loss);
+        } else if (net < 0) {
+            vault.transfer(address(position), treasury, WavvyMath.absSigned(net));
         }
-        vault.transfer(address(position), holder, payoutOut);
+        if (payoutOut > 0) vault.transfer(address(position), holder, payoutOut);
 
         if (penalty > 0 && liquidator != address(0)) {
-            _payLiquidationShares(marketId, liquidator, penalty);
+            liquidatorPaid = _payLiquidationShares(marketId, liquidator, penalty);
         }
 
-        return payoutOut;
+        return (payoutOut, liquidatorPaid);
     }
 
     /// @dev Ensure the treasury account can cover an outgoing amount, pulling
@@ -516,22 +608,23 @@ contract WavvyHouse is AccessControl, ReentrancyGuard, IWavvyHouse {
         vault.transfer(address(this), treasury, covered);
     }
 
-    function _equity(IPosition.PositionData memory p, int256 growth, uint256 mark)
+    function _equity(IPosition.PositionData memory p, int256 growth, uint256 price)
         internal
         pure
         returns (int256)
     {
-        int256 pnl = _pnl(p.isLong, p.size, p.entryPrice, mark);
-        int256 fundingCost = FundingLib.payment(p.size, growth, p.lastFundingGrowth);
+        int256 pnl = _pnl(p.isLong, p.size, p.entryPrice, price);
+        int256 fundingPayment = FundingLib.payment(p.size, growth, p.lastFundingGrowth);
+        int256 fundingCost = p.isLong ? fundingPayment : WavvyMath.subSigned(0, fundingPayment);
         return WavvyMath.subSigned(WavvyMath.addSigned(WavvyMath.signed(p.margin), pnl), fundingCost);
     }
 
-    function _isLiquidatable(IPosition.PositionData memory p, int256 growth, uint256 mark)
+    function _isLiquidatable(IPosition.PositionData memory p, int256 growth, uint256 mark, uint256 equityPrice)
         internal
         view
         returns (bool)
     {
-        int256 equity = _equity(p, growth, mark);
+        int256 equity = _equity(p, growth, equityPrice);
         uint256 maintenance = WavvyMath.mulBps(WavvyMath.mulWad(p.size, mark), risk.maintenanceMarginBps(p.marketId));
         return equity < WavvyMath.signed(maintenance);
     }

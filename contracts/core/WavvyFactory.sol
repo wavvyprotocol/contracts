@@ -72,7 +72,6 @@ contract WavvyFactory is AccessControl, IWavvyFactory {
         market.exists = true;
 
         uint8 priceSource = marketType == TYPE_INDEX ? PRICE_SOURCE_INDEX : PRICE_SOURCE_METRIC;
-        if (priceSource == PRICE_SOURCE_METRIC && metricId == bytes32(0)) revert InvalidPriceSource();
 
         amm.createMarket(marketId, initialPrice, virtualDepth);
         house.setMarketPriceSource(marketId, priceSource, metricId);

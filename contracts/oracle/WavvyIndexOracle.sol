@@ -34,6 +34,8 @@ contract WavvyIndexOracle is AccessControl, IWavvyIndexOracle {
     mapping(uint256 => IndexMarket) private _markets;
 
     error UnknownIndexMarket();
+    error ConstituentOutOfRange();
+    error DuplicateMetric();
     error LengthMismatch();
     error ZeroBaseline();
     error EmptyConstituents();
@@ -82,7 +84,7 @@ contract WavvyIndexOracle is AccessControl, IWavvyIndexOracle {
     {
         IndexMarket storage market = _markets[marketId];
         if (!market.registered) revert UnknownIndexMarket();
-        if (index >= market.constituents.length) revert UnknownIndexMarket();
+        if (index >= market.constituents.length) revert ConstituentOutOfRange();
         market.constituents[index].frozen = frozen;
         emit ConstituentFrozenSet(marketId, index, frozen);
     }
@@ -147,6 +149,9 @@ contract WavvyIndexOracle is AccessControl, IWavvyIndexOracle {
         delete market.constituents;
         for (uint256 i; i < len; ++i) {
             if (baselines[i] == 0) revert ZeroBaseline();
+            for (uint256 j; j < i; ++j) {
+                if (metricIds[j] == metricIds[i]) revert DuplicateMetric();
+            }
             market.constituents.push(Constituent({ metricId: metricIds[i], baseline: baselines[i], frozen: false }));
         }
     }

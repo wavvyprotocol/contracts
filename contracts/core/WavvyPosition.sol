@@ -23,7 +23,6 @@ contract WavvyPosition is ERC721, AccessControl, IPosition {
     mapping(uint256 => bool) private _exists;
 
     error NoToken();
-    error HouseOnly();
 
     event PositionMinted(uint256 indexed tokenId, address indexed holder, uint256 indexed marketId);
     event PositionUpdated(uint256 indexed tokenId, uint256 size, uint256 margin, int256 lastFundingGrowth);

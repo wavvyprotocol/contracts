@@ -9,16 +9,20 @@ contract MockOracle is IWavvyOracle {
     mapping(bytes32 => uint256) private _twaps;
     mapping(bytes32 => bool) private _fresh;
 
+    error Stale();
+
     function set(bytes32 metricId, uint256 twap, bool fresh) external {
         _twaps[metricId] = twap;
         _fresh[metricId] = fresh;
     }
 
     function getTWAP(bytes32 metricId) external view override returns (uint256) {
+        if (!_fresh[metricId]) revert Stale();
         return _twaps[metricId];
     }
 
     function getTWAP(bytes32 metricId, uint64) external view override returns (uint256) {
+        if (!_fresh[metricId]) revert Stale();
         return _twaps[metricId];
     }
 

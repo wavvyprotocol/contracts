@@ -194,4 +194,23 @@ contract WavvyIndexOracleTest is Test {
         );
         indexOracle.registerIndexMarket(3, one, zeroBaseline);
     }
+
+    function test_DuplicateMetricRejected() public {
+        bytes32[] memory metricIds = new bytes32[](2);
+        metricIds[0] = METRIC_A;
+        metricIds[1] = METRIC_A;
+        uint256[] memory baselines = new uint256[](2);
+        baselines[0] = 100e18;
+        baselines[1] = 100e18;
+
+        vm.prank(admin);
+        vm.expectRevert(WavvyIndexOracle.DuplicateMetric.selector);
+        indexOracle.registerIndexMarket(3, metricIds, baselines);
+    }
+
+    function test_ConstituentOutOfRangeUsesDedicatedError() public {
+        vm.prank(admin);
+        vm.expectRevert(WavvyIndexOracle.ConstituentOutOfRange.selector);
+        indexOracle.setConstituentFrozen(MARKET_ID, 99, true);
+    }
 }

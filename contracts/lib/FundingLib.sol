@@ -3,7 +3,7 @@ pragma solidity 0.8.34;
 
 import { WavvyMath } from "./WavvyMath.sol";
 
-/// @notice Cumulative funding index math. The funding rate is clamp(k * (mark - index) / index, -maxRate, +maxRate) per block and the index grows by rate * elapsed blocks. Positions settle withnsize * (growth - lastGrowth), so no loop over positions is ever needed.
+/// @notice Cumulative funding index math. The funding rate is clamp(k * (mark - index) / index, -maxRate, +maxRate) per block and the index grows by rate * elapsed blocks. Positions settle with size * (growth - lastGrowth), so no loop over positions is ever needed.
 library FundingLib {
     struct State {
         int256 growth;
